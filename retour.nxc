@@ -1,0 +1,108 @@
+#define COMPASS_PORT         S1
+#define OBSTACLE_THRESHOLD   25
+
+#define LEFT_MOTOR           OUT_C
+#define RIGHT_MOTOR          OUT_A
+#define BOTH_MOTORS          OUT_AC
+
+#define EXPLORATORY_ITERATIONS 20
+#define DIRECTION_LEFT  0
+#define DIRECTION_RIGHT 1
+#define TURN_RIGHT() \
+OnFwd(LEFT_MOTOR, 25);OnRev(RIGHT_MOTOR, 25)
+#define TURN_LEFT() \
+OnFwd(RIGHT_MOTOR, 25);OnRev(LEFT_MOTOR, 25)
+
+void ExploreFreely() {
+    for (int its = 0; its < EXPLORATORY_ITERATIONS; its++) {
+        int direction=Random(1);
+        OnFwdSync(BOTH_MOTORS, 25, 0);
+        Wait(100);
+        if (direction == DIRECTION_LEFT) {
+            TURN_LEFT();
+            Wait(100);
+        } else {
+            TURN_RIGHT();
+            Wait(100);
+        }
+    }
+    //Wait(20);
+}
+
+task goNorth()
+{
+    int fin=0;
+    long now=0;
+    long bef=FirstTick();
+    long stime=0;
+    long sum=0;
+
+    short compassValue=0;
+    long refCompass=SensorHTCompass(COMPASS_PORT);
+
+
+    while (fin==0) {
+        now=CurrentTick();
+        stime+=now-bef;
+        bef=now;
+
+        // display compass status
+        compassValue = SensorHTCompass(COMPASS_PORT);
+        sum=(sum+compassValue-refCompass)%360;
+        refCompas=compassValue;
+
+        TextOut(0, LCD_LINE2, "Time: ");
+        NumOut(25, LCD_LINE2, stime);
+
+        TextOut(0, LCD_LINE5, "Compass: ");
+        NumOut(15, LCD_LINE5, compassValue);
+
+        TextOut(0, LCD_LINE8, "Sum: ");
+        NumOut(25, LCD_LINE8, sum);
+
+        if(stime<10000){
+            ExploreFreely();
+        }
+        else{
+            fin=1;
+        }
+    }
+
+    long target=(sum+180)%360;
+    bef=CurrentTick();
+    fin=0;
+
+    while(fin==0){
+        compassValue=SensorHTCompass(COMPASS_PORT);
+
+        TextOut(0, LCD_LINE2, "Time left: ");
+        NumOut(25, LCD_LINE2, stime);
+
+        TextOut(0, LCD_LINE5, "Compass: ");
+        NumOut(15, LCD_LINE5, compassValue);
+
+        TextOut(0, LCD_LINE8, "Target: ");
+        NumOut(25, LCD_LINE8, target);
+
+        // are we facing North? Make it be so!
+        if (compassValue > target-15 && compassValue < target+15) {
+            OnFwdSync(BOTH_MOTORS, 20, 0);
+            Wait(100);
+        } else {
+            TURN_RIGHT();
+            Wait(80);
+        }
+        now=CurrentTick();
+        stime=stime -(now-bef);
+        if(stime<0){
+            fin=1;
+        }
+        Wait(20); /* This is a good sample rate */
+    }
+}
+
+task main()
+{
+    Precedes(goNorth);
+    SetSensorLowspeed(COMPASS_PORT);
+}
