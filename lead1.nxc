@@ -81,39 +81,23 @@ void TurnRight(int angle)
 
 int turn(short angle, short ref){
      int end =0;
+     int obj=ref+angle;
+     while(obj<0){
+       obj+=360;
+     }
+     obj=obj%360;
      int compValue=SensorHTCompass(COMPASS_PORT);
-     int diff=0;
-     diff=compValue-ref;
-     if(diff<0){
-       diff+=360;
-     }
-     while(compValue-ref > angle+2){
-        TextOut(0, LCD_LINE5, "Left");
-        NumOut(25, LCD_LINE5, SensorHTCompass(COMPASS_PORT)-ref);
-        OnFwd(OUT_A, 22); // turn left
+     string msg;
+
+     while(compValue > obj){
+        OnFwd(OUT_A, 22);// turn left
         OnRev(OUT_C,22);
-        Wait(20);
         compValue=SensorHTCompass(COMPASS_PORT);
-        diff=compValue-ref;
-        if(diff<0){
-          diff+=360;
-        }
-        diff=diff=diff-(diff/360)*360;
-        //TurnLeft(2);
      }
-     while(compValue-ref < angle-2){
-        TextOut(0, LCD_LINE5, "Right");
-        NumOut(25, LCD_LINE5, SensorHTCompass(COMPASS_PORT)-ref);
+     while(compValue < obj){
         OnFwd(OUT_C, 22); // turn right
         OnRev(OUT_A,22);
-        Wait(20);
         compValue=SensorHTCompass(COMPASS_PORT);
-        diff=compValue-ref;
-        if(diff<0){
-          diff+=360;
-        }
-        diff=diff-(diff/360)*360;
-        //TurnRight(2);
      }
      end=1;
 }
@@ -393,12 +377,9 @@ task testUS(){
  
 task turnff(){
      SetSensorLowspeed(COMPASS_PORT);
-     NumOut(0, LCD_LINE3, SensorHTCompass(COMPASS_PORT));
-     turn(90, SensorHTCompass(COMPASS_PORT));
-     /*OnFwdSync(BOTH_MOTORS, 40, 0);
-     Wait(500000);*/
+     turn(-90, SensorHTCompass(COMPASS_PORT));
+     turn(+180, SensorHTCompass(COMPASS_PORT));
 }
-
  
 task main()
 {
