@@ -22,7 +22,28 @@
 OnFwd(LEFT_MOTOR, 30);OnRev(RIGHT_MOTOR, 30)
 #define TURN_LEFT() \
 OnFwd(RIGHT_MOTOR, 30);OnRev(LEFT_MOTOR, 30)
+
+int dist_search=0;
+
+void joy()
+{
+   PlayTone(TONE_E4, MS_100);
+   Wait(MS_100);
+   PlayTone(TONE_G4, MS_100);
+   Wait(MS_100);
+   PlayTone(TONE_C5, MS_100);
+   Wait(MS_100);
+   PlayTone(TONE_E5, MS_100);
+   Wait(MS_100);
+   PlayTone(TONE_G5, MS_300);
+   Wait(MS_300);
+   PlayTone(TONE_E5, MS_100);
+   Wait(MS_100);
+   PlayTone(TONE_G5, SEC_1);
+   Wait(SEC_1);
+}
 byte next_rob;
+task search();
 
 void GoFront()
 {
@@ -58,6 +79,49 @@ void TurnRight(int angle)
   Wait(90*angle/4);
 }
 
+int turn(short angle, short ref){
+     int end =0;
+     int compValue=SensorHTCompass(COMPASS_PORT);
+     int diff=0;
+     diff=compValue-ref;
+     if(diff<0){
+       diff+=360;
+     }
+     while(compValue-ref > angle+2){
+        TextOut(0, LCD_LINE5, "Left");
+        NumOut(25, LCD_LINE5, SensorHTCompass(COMPASS_PORT)-ref);
+        OnFwd(OUT_A, 22); // turn left
+        OnRev(OUT_C,22);
+        Wait(20);
+        compValue=SensorHTCompass(COMPASS_PORT);
+        diff=compValue-ref;
+        if(diff<0){
+          diff+=360;
+        }
+        diff=diff=diff-(diff/360)*360;
+        //TurnLeft(2);
+     }
+     while(compValue-ref < angle-2){
+        TextOut(0, LCD_LINE5, "Right");
+        NumOut(25, LCD_LINE5, SensorHTCompass(COMPASS_PORT)-ref);
+        OnFwd(OUT_C, 22); // turn right
+        OnRev(OUT_A,22);
+        Wait(20);
+        compValue=SensorHTCompass(COMPASS_PORT);
+        diff=compValue-ref;
+        if(diff<0){
+          diff+=360;
+        }
+        diff=diff-(diff/360)*360;
+        //TurnRight(2);
+     }
+     end=1;
+}
+
+float speed(int pow){
+      return 0.0039*pow-0.0293;
+}
+
 
 
 int distance()
@@ -71,7 +135,7 @@ int distance()
   {
     list[cpt]=SensorUS(IN_4);
     if(list[cpt]<=9) ok++;
-    Wait(40);
+    Wait(100);
     cpt++;
   }
   if(ok>=3) return 1;
@@ -117,15 +181,14 @@ void sendMessage (byte msg[]) {
 
 task catch()
 {
-  long now=0;
-  long bef=FirstTick();
-  long stime=0;
+  Off(OUT_ABC);
   int sum=0;
   int diff=0;
-  long refCompass;
+  short refCompass;
   short compassValue=0;
   int dist=0;
-  SetSensorUltrasonic(IN_4);
+  SetSensorLowspeed(COMPASS_PORT);
+
   while(true)
   {
     if(SensorHTCompass(COMPASS_PORT)>=0){compassValue=(SensorHTCompass(COMPASS_PORT));}
@@ -137,55 +200,54 @@ task catch()
     sum=sum-(sum/360)*360;
 
     refCompass=compassValue;
-
+/*
     ClearScreen();
-    TextOut(0, LCD_LINE2, "T: ");
-    NumOut(25, LCD_LINE2, stime);
-
     TextOut(0, LCD_LINE5, "C: ");
     NumOut(27, LCD_LINE5, compassValue-refCompass);
 
     TextOut(0, LCD_LINE8, "S: ");
     NumOut(25, LCD_LINE8, sum);
-
-
-
+*/
     dist = SensorUS(IN_4);
     //TextOut(0,0,NumToStr(Sensor(S3))+NumToStr(Sensor(S4)));
-    Wait(200);
+    //Wait(200);
     ClearScreen();
-    NumOut(0,0,SensorUS(IN_4));
-    if(dist<10)
+    TextOut(0,LCD_LINE3, "Dist: ");
+    NumOut(28,LCD_LINE3,dist);
+    while(dist>13)
     {
-      OnFwdSync(OUT_AC,20,-1);
-      OnFwd(OUT_B,25);               // baisse la grue
-      if(distance()==1)
-      {
-        Off(OUT_AC);               //éteins les moteurs
-        break;
-      }
-      else
-      {
-        OnFwdSync(OUT_AC,30,-1);
-        OnRev(OUT_B,25);
-      }
+     OnFwdSync(BOTH_MOTORS, 22, -1);
+     dist= SensorUS(IN_4);
     }
+    
+    
+    OnFwd(OUT_B, 30);
+    OnFwdSync(BOTH_MOTORS, 19, -1);
+    Wait(150);
+    if(distance()==1){
+       Off(OUT_ABC);
+       break;
+    }
+    else{
+      OnRev(OUT_B, 20);
+      Wait(150);
+    }
+
+
+
   }
   int target=(sum+180);
   target=target-(target/360)*360;
   while(true)
   {
     compassValue=SensorHTCompass(COMPASS_PORT);
-    ClearScreen();
-    TextOut(0, LCD_LINE2, "TL: ");
-    NumOut(25, LCD_LINE2, stime);
-
+/*    ClearScreen();
     TextOut(0, LCD_LINE5, "C: ");
     NumOut(27, LCD_LINE5, compassValue);
 
     TextOut(0, LCD_LINE8, "T: ");
     NumOut(25, LCD_LINE8, target);
-
+*/
     // are we facing North? Make it be so!
     if (compassValue > target-4 && compassValue < target+4)
     {
@@ -205,10 +267,12 @@ task catch()
       Wait(30);
     }
 
-    Wait(20); /* This is a good sample rate */
+    Wait(20); // This is a good sample rate
   }
 }
 
+
+ /*
   void send_wait(byte &msg[], byte dest, byte delay, byte* id)
   {
     ArrayInit(msg, 0, 6);
@@ -219,12 +283,12 @@ task catch()
     msg[4] = 0x05;
     msg[6] = delay;
   }
-
+*/
 
 task search()
 {
   byte msg[];
-  msg= send_wait()
+  //msg= send_wait()
 
   SetSensorUltrasonic(IN_4);
   OnRev(OUT_B,25);
@@ -236,13 +300,26 @@ task search()
   {
     list[i]=SensorUS(IN_4);
     TurnRight(1);
-    Wait(90/4);
-    if(i!=0&&abs((list[i-1]-list[i])/list[i-1])>0.3) break;         // on teste
+    Wait(110/4);
+    if(i!=0){
+       ClearScreen();
+       TextOut(0, LCD_LINE3, "%: ");
+       NumOut(25, LCD_LINE3, (list[i-1]-list[i])/list[i-1]);
+       if(abs((list[i-1]-list[i])/list[i-1])>0.3){
+        TextOut(0, LCD_LINE5, "L[i]: ");
+        NumOut(30, LCD_LINE5, list[i]);
+        Wait(3000);
+        dist_search=list[i];
+        break;
+       }
+    }
   }
   // penser a sortir, no infinite maggle
+  Off(OUT_B);
   ExitTo(catch);
 }
 
+/*
 task listen()
 {
   if (BluetoothStatus(CONNECTION) != NO_ERR)
@@ -300,12 +377,31 @@ task listen()
 
   Wait (5000);
 }
+*/
 
 
+task testUS(){
+   SetSensorUltrasonic(IN_4);
+   int lol;
+   while(true){
+    Wait(300);
+    lol= SensorUS(IN_4);
+    NumOut(0, LCD_LINE3, lol);
+    //ClearScreen();
+    }
+ }
+ 
+task turnff(){
+     SetSensorLowspeed(COMPASS_PORT);
+     NumOut(0, LCD_LINE3, SensorHTCompass(COMPASS_PORT));
+     turn(90, SensorHTCompass(COMPASS_PORT));
+     /*OnFwdSync(BOTH_MOTORS, 40, 0);
+     Wait(500000);*/
+}
 
+ 
 task main()
 {
-  Precedes(search);
-
-
+     Precedes(turnff);
+    //Precedes(search);
 }
