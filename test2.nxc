@@ -1,0 +1,567 @@
+#define CONNECTION  1
+#define SERV_NAME   "eurecom-os-server"             // The name of the server
+
+#define MSG_ACTION  0
+#define MSG_ACK     1
+#define MSG_LEAD    2
+#define MSG_START   3
+#define MSG_STOP    4
+#define MSG_WAIT    5
+#define MSG_CUSTOM  6
+
+
+void joy()
+{
+   PlayTone(TONE_E4, MS_100);
+   Wait(MS_100);
+   PlayTone(TONE_G4, MS_100);
+   Wait(MS_100);
+   PlayTone(TONE_C5, MS_100);
+   Wait(MS_100);
+   PlayTone(TONE_E5, MS_100);
+   Wait(MS_100);
+   PlayTone(TONE_G5, MS_300);
+   Wait(MS_300);
+   PlayTone(TONE_E5, MS_100);
+   Wait(MS_100);
+   PlayTone(TONE_G5, SEC_1);
+   Wait(SEC_1);
+}
+void sadness()
+{
+   PlayTone(TONE_C5, MS_500);
+   Wait(MS_500);
+   PlayTone(TONE_B4, MS_500);
+   Wait(MS_500);
+   PlayTone(TONE_AS4, MS_500);
+   Wait(MS_500);
+   repeat (10)
+   {
+   PlayTone(TONE_A4, MS_50);
+   Wait(MS_50);
+   PlayTone(TONE_AS4, MS_50);
+   Wait(MS_50);
+   }
+   PlayTone(TONE_A4, MS_200);
+   Wait(MS_200);
+}
+
+task mario()
+{
+ while(true)
+ {
+PlayTone(TONE_E5,MS_100);
+Wait(MS_150);
+PlayTone(TONE_E5,MS_100);
+Wait(MS_300);
+PlayTone(TONE_E5,MS_100);
+Wait(MS_300);
+PlayTone(TONE_C5,MS_100);
+Wait(MS_100);
+PlayTone(TONE_E5,MS_100);
+Wait(MS_300);
+PlayTone(TONE_G5,MS_100);
+Wait(MS_500);
+PlayTone(TONE_G4,MS_100);
+Wait(MS_600);
+PlayTone(TONE_C5,MS_100);
+Wait(MS_450);
+PlayTone(TONE_G4,MS_100);
+Wait(MS_400);
+PlayTone(TONE_E4,MS_100);
+Wait(MS_500);
+PlayTone(TONE_A4,MS_100);
+Wait(MS_300);
+PlayTone(TONE_B4,MS_80);
+Wait(MS_350);
+PlayTone(TONE_AS4,MS_100);
+Wait(MS_150);
+PlayTone(TONE_A4,MS_100);
+Wait(MS_300);
+PlayTone(TONE_G4,MS_100);
+Wait(MS_200);
+PlayTone(TONE_E5,MS_80);
+Wait(MS_200);
+PlayTone(TONE_G5,MS_50);
+Wait(MS_150);
+PlayTone(TONE_A5,MS_100);
+Wait(MS_300);
+PlayTone(TONE_F5,MS_80);
+Wait(MS_150);
+PlayTone(TONE_G5,MS_50);
+Wait(MS_350);
+PlayTone(TONE_E5,MS_80);
+Wait(MS_300);
+PlayTone(TONE_C5,MS_80);
+Wait(MS_150);
+PlayTone(TONE_D5,MS_80);
+Wait(MS_150);
+PlayTone(TONE_B4,MS_80);
+Wait(MS_500);
+
+PlayTone(TONE_C5,MS_100);
+Wait(MS_450);
+PlayTone(TONE_G4,MS_100);
+Wait(MS_400);
+PlayTone(TONE_E4,MS_100);
+Wait(MS_500);
+PlayTone(TONE_A4,MS_100);
+Wait(MS_300);
+PlayTone(TONE_B4,MS_80);
+Wait(MS_350);
+PlayTone(TONE_AS4,MS_100);
+Wait(MS_150);
+PlayTone(TONE_A4,MS_100);
+Wait(MS_300);
+PlayTone(TONE_G4,MS_100);
+Wait(MS_200);
+PlayTone(TONE_E5,MS_80);
+Wait(MS_200);
+PlayTone(TONE_G5,MS_50);
+Wait(MS_150);
+PlayTone(TONE_A5,MS_100);
+Wait(MS_300);
+PlayTone(TONE_F5,MS_80);
+Wait(MS_150);
+PlayTone(TONE_G5,MS_50);
+Wait(MS_350);
+PlayTone(TONE_E5,MS_80);
+Wait(MS_300);
+PlayTone(TONE_C5,MS_80);
+Wait(MS_150);
+PlayTone(TONE_D5,MS_80);
+Wait(MS_150);
+PlayTone(TONE_B4,MS_80);
+Wait(MS_500);
+
+PlayTone(TONE_C4,MS_100);
+Wait(MS_300);
+PlayTone(TONE_G5,MS_100);
+Wait(MS_100);
+PlayTone(TONE_FS5,MS_100);
+Wait(MS_150);
+PlayTone(TONE_F5,MS_100);
+Wait(MS_150);
+PlayTone(TONE_DS5,MS_150);
+Wait(MS_300);
+PlayTone(TONE_E5,MS_150);
+Wait(MS_300);
+PlayTone(TONE_G4,MS_100);
+Wait(MS_150);
+PlayTone(TONE_A4,MS_100);
+Wait(MS_150);
+
+PlayTone(TONE_C5,MS_100);
+Wait(MS_300);
+PlayTone(TONE_A4,MS_100);
+Wait(MS_150);
+PlayTone(TONE_C5,MS_100);
+Wait(MS_100);
+PlayTone(TONE_D5,MS_100);
+Wait(MS_200);
+
+PlayTone(TONE_C4,MS_100);
+Wait(MS_300);
+
+PlayTone(TONE_G5,MS_100);
+Wait(MS_100);
+PlayTone(TONE_FS5,MS_100);
+Wait(MS_150);
+PlayTone(TONE_F5,MS_100);
+Wait(MS_150);
+PlayTone(TONE_DS5,MS_150);
+Wait(MS_300);
+
+PlayTone(TONE_E5,MS_200);
+Wait(MS_300);
+
+PlayTone(TONE_C6,MS_80);
+Wait(MS_300);
+PlayTone(TONE_C6,MS_80);
+Wait(MS_150);
+PlayTone(TONE_C6,MS_80);
+Wait(MS_300);
+
+PlayTone(TONE_G4,MS_100);
+Wait(MS_300);
+PlayTone(TONE_C4,MS_100);
+Wait(MS_300);
+
+PlayTone(TONE_G5,MS_100);
+Wait(MS_100);
+PlayTone(TONE_FS5,MS_100);
+Wait(MS_150);
+PlayTone(TONE_F5,MS_100);
+Wait(MS_150);
+PlayTone(TONE_DS5,MS_150);
+Wait(MS_300);
+
+PlayTone(TONE_E5,MS_150);
+Wait(MS_300);
+PlayTone(TONE_G4,MS_100);
+Wait(MS_150);
+PlayTone(TONE_A4,MS_100);
+Wait(MS_150);
+
+PlayTone(TONE_C5,MS_100);
+Wait(MS_300);
+PlayTone(TONE_A4,MS_100);
+Wait(MS_150);
+PlayTone(TONE_C5,MS_100);
+Wait(MS_100);
+PlayTone(TONE_D5,MS_100);
+Wait(MS_400);
+
+PlayTone(TONE_DS5,MS_100);
+Wait(MS_450);
+
+PlayTone(TONE_D5,MS_100);
+Wait(MS_400);
+
+PlayTone(TONE_C5,MS_100);
+Wait(MS_450);
+
+PlayTone(TONE_G4,MS_100);
+Wait(MS_150);
+PlayTone(TONE_G4,MS_100);
+Wait(MS_300);
+PlayTone(TONE_C4,MS_100);
+Wait(MS_300);
+PlayTone(TONE_C4,MS_100);
+Wait(MS_300);
+
+PlayTone(TONE_G5,MS_100);
+Wait(MS_100);
+PlayTone(TONE_FS5,MS_100);
+Wait(MS_150);
+PlayTone(TONE_F5,MS_100);
+Wait(MS_150);
+PlayTone(TONE_DS5,MS_150);
+Wait(MS_300);
+
+PlayTone(TONE_E5,MS_150);
+Wait(MS_300);
+PlayTone(TONE_G4,MS_100);
+Wait(MS_150);
+PlayTone(TONE_A4,MS_100);
+Wait(MS_150);
+
+PlayTone(TONE_C5,MS_100);
+Wait(MS_300);
+PlayTone(TONE_A4,MS_100);
+Wait(MS_150);
+PlayTone(TONE_C5,MS_100);
+Wait(MS_100);
+PlayTone(TONE_D5,MS_100);
+Wait(MS_200);
+
+PlayTone(TONE_C4,MS_100);
+Wait(MS_300);
+
+PlayTone(TONE_G5,MS_100);
+Wait(MS_100);
+PlayTone(TONE_FS5,MS_100);
+Wait(MS_150);
+PlayTone(TONE_F5,MS_100);
+Wait(MS_150);
+PlayTone(TONE_DS5,MS_150);
+Wait(MS_300);
+
+PlayTone(TONE_E5,MS_200);
+Wait(MS_300);
+
+PlayTone(TONE_C6,MS_80);
+Wait(MS_300);
+PlayTone(TONE_C6,MS_80);
+Wait(MS_150);
+PlayTone(TONE_C6,MS_80);
+Wait(MS_300);
+
+PlayTone(TONE_G4,MS_100);
+Wait(MS_300);
+PlayTone(TONE_C4,MS_100);
+Wait(MS_300);
+
+PlayTone(TONE_G5,MS_100);
+Wait(MS_100);
+PlayTone(TONE_FS5,MS_100);
+Wait(MS_150);
+PlayTone(TONE_F5,MS_100);
+Wait(MS_150);
+PlayTone(TONE_DS5,MS_150);
+Wait(MS_300);
+
+PlayTone(TONE_E5,MS_150);
+Wait(MS_300);
+PlayTone(TONE_G4,MS_100);
+Wait(MS_150);
+PlayTone(TONE_A4,MS_100);
+Wait(MS_150);
+
+PlayTone(TONE_C5,MS_100);
+Wait(MS_300);
+PlayTone(TONE_A4,MS_100);
+Wait(MS_150);
+PlayTone(TONE_C5,MS_100);
+Wait(MS_100);
+PlayTone(TONE_D5,MS_100);
+Wait(MS_400);
+
+PlayTone(TONE_DS5,MS_100);
+Wait(MS_450);
+
+PlayTone(TONE_D5,MS_100);
+Wait(MS_400);
+
+PlayTone(TONE_C5,MS_100);
+Wait(MS_450);
+
+PlayTone(TONE_G4,MS_100);
+Wait(MS_150);
+PlayTone(TONE_G4,MS_100);
+Wait(MS_300);
+PlayTone(TONE_C4,MS_100);
+Wait(MS_300);
+
+PlayTone(TONE_C5,MS_60);
+Wait(MS_150);
+PlayTone(TONE_C5,MS_80);
+Wait(MS_300);
+PlayTone(TONE_C5,MS_60);
+Wait(MS_350);
+PlayTone(TONE_C5,MS_80);
+Wait(MS_150);
+PlayTone(TONE_D5,MS_80);
+Wait(MS_350);
+PlayTone(TONE_E5,MS_80);
+Wait(MS_150);
+PlayTone(TONE_C5,MS_80);
+Wait(MS_300);
+PlayTone(TONE_A4,MS_80);
+Wait(MS_150);
+PlayTone(TONE_G4,MS_80);
+Wait(MS_600);
+
+PlayTone(TONE_C5,MS_60);
+Wait(MS_150);
+PlayTone(TONE_C5,MS_80);
+Wait(MS_300);
+PlayTone(TONE_C5,MS_60);
+Wait(MS_350);
+PlayTone(TONE_C5,MS_80);
+Wait(MS_150);
+PlayTone(TONE_D5,MS_80);
+Wait(MS_150);
+PlayTone(TONE_E5,MS_80);
+Wait(MS_500);
+
+PlayTone(TONE_A5,MS_80);
+Wait(MS_350);
+PlayTone(TONE_G5,MS_80);
+Wait(MS_600);
+
+PlayTone(TONE_C5,MS_60);
+Wait(MS_150);
+PlayTone(TONE_C5,MS_80);
+Wait(MS_300);
+PlayTone(TONE_C5,MS_60);
+Wait(MS_350);
+PlayTone(TONE_C5,MS_80);
+Wait(MS_150);
+PlayTone(TONE_D5,MS_80);
+Wait(MS_350);
+PlayTone(TONE_E5,MS_80);
+Wait(MS_150);
+PlayTone(TONE_C5,MS_80);
+Wait(MS_300);
+PlayTone(TONE_A4,MS_80);
+Wait(MS_150);
+PlayTone(TONE_G4,MS_80);
+Wait(MS_600);
+ }
+}
+
+void GoFront()
+{
+   OnRevSync(OUT_AC,25,1);
+}
+
+void CloseTrap()
+{
+   OnFwd(OUT_B,25);
+}
+
+void OpenTrap()
+{
+   OnRev(OUT_B,25);
+}
+
+void GoBack()
+{
+   OnFwd(OUT_B,25);
+}
+
+void TurnLeft(int angle)
+{
+   OnFwd(OUT_A,25);
+   OnRev(OUT_C,25);
+   Wait(20*angle);
+}
+
+void TurnRight(int angle)
+{
+   OnFwd(OUT_C,25);
+   OnRev(OUT_A,25);
+   Wait(90*angle/4);
+}
+
+
+
+int touch()
+{
+   SetSensorColorFull(IN_2);
+   SetSensorColorFull(IN_3);
+ /*  if(SENSOR_2 && !SENSOR_3) return 1;
+   else if(!SENSOR_2 && SENSOR_3) return 2;
+   else if(SENSOR_2 && SENSOR_3) return 3;
+   else return 0;
+   */
+}
+
+int distance()
+{
+    SetSensorUltrasonic(IN_4);
+    int list[];
+    ArrayInit(list, 0, 5);
+    int cpt = 0;
+    int ok = 0;
+    while(list[4]==0)
+    {
+           list[cpt]=SensorUS(IN_4);
+           if(list[cpt]<=9) ok++;
+           Wait(40);
+           cpt++;
+    }
+    if(ok>=3) return 1;
+    else return 0;
+
+}
+
+
+
+char getMessage (byte &msg[]) {
+    until (BluetoothStatus(CONNECTION) == NO_ERR);  // Wait for connection
+    string __msg;
+    char r = ReceiveMessage(0,1,__msg);
+    if (r != 0)
+        return 0;
+
+    ArrayInit(msg,0,59);
+    StrToByteArray (__msg, msg);
+    r = ArrayLen(msg);
+    if (r < 5)
+        return 0;
+
+    return r;
+}
+
+void sendMessage (byte msg[]) {
+    CommBTWriteType args2;
+    args2.Connection = CONNECTION;
+    args2.Buffer= ByteArrayToStr (msg);
+
+    SysCommBTWrite(args2);
+    TextOut(0, LCD_LINE2,       "Trying to write");
+    while (BluetoothStatus (CONNECTION) == STAT_COMM_PENDING)
+        Wait (10);
+
+    if (BluetoothStatus (CONNECTION) == NO_ERR)
+        TextOut(0, LCD_LINE2,   "Write Done     ");
+    else
+        TextOut(0, LCD_LINE2,   "Write Failed   ");
+}
+
+
+
+
+task catch()
+{
+   SetSensorColorFull(S3);
+   SetSensorColorFull(S4);
+   SetSensorUltrasonic(IN_4);
+   while(true)
+   {
+    if(touch()==0)
+    {
+      int i = SensorUS(IN_4);
+      //TextOut(0,0,NumToStr(Sensor(S3))+NumToStr(Sensor(S4)));
+      Wait(200);
+      ClearScreen();
+      NumOut(0,0,SensorUS(IN_4));
+      if(i<10)
+      {
+         OnFwdSync(OUT_AC,20,-1);
+         OnFwd(OUT_B,25);
+         if(distance()==1)
+         {
+             Off(OUT_AC);
+             joy();
+             break;
+         }
+      }
+      else
+      {
+         OnFwdSync(OUT_AC,30,-1);
+         OnRev(OUT_B,25);
+      }
+    }
+    else
+    {
+         OnRev(OUT_B,25);
+         if(touch()==1)
+         {
+           TurnLeft(90);
+         }
+         else if(touch()==2)
+         {
+           TurnRight(90);
+         }
+         else
+         {
+           GoBack();
+           TurnLeft(90);
+         }
+    }
+   }
+}
+
+task search()
+{
+ SetSensorUltrasonic(IN_4);
+ OnRev(OUT_B,25);
+ Wait(200);
+ float list[];
+ int i=0;
+ ArrayInit(list, 0, 360);
+ for(i;i<360;i++)
+ {
+     list[i]=SensorUS(IN_4);
+     TurnRight(1);
+     Wait(90/4);
+     if(i!=0&&abs((list[i-1]-list[i])/list[i-1])>0.3) break;         // on teste
+ }                                                                 // penser a sortir, no infinite maggle
+ ExitTo(catch);
+}
+
+task testlol(){
+     OnFwdSync(OUT_AC, 50,-1);
+     Wait(99999);
+}
+
+task main()
+{
+   //Precedes(testlol);
+   Precedes(search);
+}
+
+

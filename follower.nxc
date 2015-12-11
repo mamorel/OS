@@ -1,0 +1,190 @@
+#define CONNECTION  1
+//Mode follower sisi la famille
+#define SERV_NAME   "eurecom-os-server"             // The name of the server
+#define MSG_ACTION  0
+#define MSG_ACK     1
+#define MSG_LEAD    2
+#define MSG_START   3
+#define MSG_STOP    4
+#define MSG_WAIT    5
+#define MSG_CUSTOM  6
+#define COMPASS_PORT         S1
+#define OBSTACLE_THRESHOLD   25
+
+#define LEFT_MOTOR           OUT_C
+#define RIGHT_MOTOR          OUT_A
+#define BOTH_MOTORS          OUT_AC
+
+#define EXPLORATORY_ITERATIONS 10
+#define DIRECTION_LEFT  0
+#define DIRECTION_RIGHT 1
+#define TURN_RIGHT() \
+OnFwd(LEFT_MOTOR, 30);OnRev(RIGHT_MOTOR, 30)
+#define TURN_LEFT() \
+OnFwd(RIGHT_MOTOR, 30);OnRev(LEFT_MOTOR, 30)
+byte next_rob;
+
+void GoFront()
+{
+   OnRevSync(OUT_AC,25,1);
+}
+
+void CloseTrap()
+{
+   OnFwd(OUT_B,25);
+}
+
+void OpenTrap()
+{
+   OnRev(OUT_B,25);
+}
+
+void GoBack()
+{
+  OnFwd(OUT_B,25);
+}
+
+void TurnLeft(int angle)
+{
+   OnFwd(OUT_A,25);
+   OnRev(OUT_C,25);
+   Wait(20*angle);
+}
+
+void TurnRight(int angle)
+{
+   OnFwd(OUT_C,25);
+   OnRev(OUT_A,25);
+   Wait(90*angle/4);
+}
+
+
+
+int distance()
+{
+    SetSensorUltrasonic(IN_4);
+    int list[];
+    ArrayInit(list, 0, 5);
+    int cpt = 0;
+    int ok = 0;
+    while(list[4]==0)
+    {
+           list[cpt]=SensorUS(IN_4);
+           if(list[cpt]<=9) ok++;
+           Wait(40);
+           cpt++;
+    }
+    if(ok>=3) return 1;
+    else return 0;
+
+}
+
+
+
+char getMessage (byte &msg[]) {
+    until (BluetoothStatus(CONNECTION) == NO_ERR);  // Wait for connection
+    string __msg;
+    char r = ReceiveMessage(0,1,__msg);
+    if (r != 0)
+        return 0;
+
+    ArrayInit(msg,0,59);
+    StrToByteArray (__msg, msg);
+    r = ArrayLen(msg);
+    if (r < 5)
+        return 0;
+
+    return r;
+}
+
+void sendMessage (byte msg[]) {
+    CommBTWriteType args2;
+    args2.Connection = CONNECTION;
+    args2.Buffer= ByteArrayToStr (msg);
+
+    SysCommBTWrite(args2);
+    TextOut(0, LCD_LINE2,       "Trying to write");
+    while (BluetoothStatus (CONNECTION) == STAT_COMM_PENDING)
+        Wait (10);
+
+    if (BluetoothStatus (CONNECTION) == NO_ERR)
+        TextOut(0, LCD_LINE2,   "Write Done     ");
+    else
+        TextOut(0, LCD_LINE2,   "Write Failed   ");
+}
+
+
+
+
+void send_wait(byte &msg[], byte dest, byte delay, byte* id)
+{
+ArrayInit(msg, 0, 6);
+ msg[0] = id[0];
+ msg[1] = id[1];
+ msg[2] = 0x08;
+ msg[3] = next_rob;                    //byte or int
+ msg[4] = 0x05;
+ msg[6] = delay;
+
+} 
+
+task listen()
+{
+  if (BluetoothStatus(CONNECTION) != NO_ERR)
+        StopAllTasks ();
+    else
+        TextOut(0, LCD_LINE1, "Conn Success!  ");
+
+    // Wait for START message
+    TextOut(0, LCD_LINE2,       "Waiting Msg...");
+    byte msg[];
+    until (getMessage (msg))
+        Wait (100);
+
+    NumOut(0, LCD_LINE3, msg[4]);
+    byte previous = 0xFF;
+    byte next = 0xFF;
+    byte rank = 0;
+    byte length = 0;
+
+    if (msg[4] == MSG_START) {
+        TextOut(0, LCD_LINE2,   "START !!!     ");
+        rank = msg[5];
+        length = msg[6];
+        previous = msg[7];
+        next_rob = msg[8];
+    }
+
+    Wait (50);
+
+    if (rank!=0)
+    {
+       StartTask(follow);
+    }
+}
+
+
+task follow()
+{
+  byte rec[];
+  ArrayInit(actionMsg,0,10);
+  getMessage(rec);
+  if(rec[3]==0x08)              // le message nous est adressé
+  {
+    int angle= 256*rec[6] +rec[5];
+    int dist=rec[7];  //in cm!!!
+    float speed= rec[8] +256*rec[9]; //in mm/s
+  }
+
+
+
+
+}
+
+
+task main()
+{
+   Precedes(search);
+
+
+}
