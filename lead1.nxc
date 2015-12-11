@@ -9,19 +9,11 @@
 #define MSG_WAIT    5
 #define MSG_CUSTOM  6
 #define COMPASS_PORT         S1
-#define OBSTACLE_THRESHOLD   25
 
 #define LEFT_MOTOR           OUT_C
 #define RIGHT_MOTOR          OUT_A
 #define BOTH_MOTORS          OUT_AC
 
-#define EXPLORATORY_ITERATIONS 10
-#define DIRECTION_LEFT  0
-#define DIRECTION_RIGHT 1
-#define TURN_RIGHT() \
-OnFwd(LEFT_MOTOR, 30);OnRev(RIGHT_MOTOR, 30)
-#define TURN_LEFT() \
-OnFwd(RIGHT_MOTOR, 30);OnRev(LEFT_MOTOR, 30)
 
 int dist_search=0;
 
@@ -45,11 +37,6 @@ void joy()
 byte next_rob;
 task search();
 
-void GoFront()
-{
-  OnRevSync(OUT_AC,25,1);
-}
-
 void CloseTrap()
 {
   OnFwd(OUT_B,25);
@@ -58,25 +45,6 @@ void CloseTrap()
 void OpenTrap()
 {
   OnRev(OUT_B,25);
-}
-
-void GoBack()
-{
-  OnFwd(OUT_B,25);
-}
-
-void TurnLeft(int angle)
-{
-  OnFwd(OUT_A,25);
-  OnRev(OUT_C,25);
-  Wait(20*angle);
-}
-
-void TurnRight(int angle)
-{
-  OnFwd(OUT_C,25);
-  OnRev(OUT_A,25);
-  Wait(90*angle/4);
 }
 
 int turn(short angle, short ref){
@@ -106,7 +74,12 @@ float speed(int pow){
       return 0.0039*pow-0.0293;
 }
 
-
+int forward(float dist, int pow){
+    float time=dist/speed(pow);
+    OnFwdSync(BOTH_MOTORS, pow, 0);
+    Wait(time*1000);
+    return 1;
+}
 
 int distance()
 {
@@ -126,8 +99,6 @@ int distance()
   else return 0;
 
 }
-
-
 
 char getMessage (byte &msg[]) {
   until (BluetoothStatus(CONNECTION) == NO_ERR);  // Wait for connection
@@ -160,7 +131,6 @@ void sendMessage (byte msg[]) {
   else
   TextOut(0, LCD_LINE2,   "Write Failed   ");
 }
-
 
 
 task catch()
@@ -203,8 +173,7 @@ task catch()
      OnFwdSync(BOTH_MOTORS, 22, -1);
      dist= SensorUS(IN_4);
     }
-    
-    
+
     OnFwd(OUT_B, 30);
     OnFwdSync(BOTH_MOTORS, 19, -1);
     Wait(150);
@@ -216,10 +185,8 @@ task catch()
       OnRev(OUT_B, 20);
       Wait(150);
     }
-
-
-
   }
+  
   int target=(sum+180);
   target=target-(target/360)*360;
   while(true)
@@ -233,25 +200,15 @@ task catch()
     NumOut(25, LCD_LINE8, target);
 */
     // are we facing North? Make it be so!
-    if (compassValue > target-4 && compassValue < target+4)
+    if (compassValue > target-1 && compassValue < target+1)
     {
       OnFwdSync(BOTH_MOTORS, 30, 0);
       Wait(500);
 
     } else
     {
-      if(compassValue>target+4)
-      {
-        TURN_LEFT();
-      }
-      if(compassValue<target-4)
-      {
-        TURN_RIGHT();
-      }
-      Wait(30);
+        turn(target-compassValue, compassValue);
     }
-
-    Wait(20); // This is a good sample rate
   }
 }
 
@@ -290,9 +247,6 @@ task search()
        TextOut(0, LCD_LINE3, "%: ");
        NumOut(25, LCD_LINE3, (list[i-1]-list[i])/list[i-1]);
        if(abs((list[i-1]-list[i])/list[i-1])>0.3){
-        TextOut(0, LCD_LINE5, "L[i]: ");
-        NumOut(30, LCD_LINE5, list[i]);
-        Wait(3000);
         dist_search=list[i];
         break;
        }
@@ -383,6 +337,7 @@ task turnff(){
  
 task main()
 {
-     Precedes(turnff);
+     //Precedes(turnff);
     //Precedes(search);
+    //forward(0.3, 35);
 }
