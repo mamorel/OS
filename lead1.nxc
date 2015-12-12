@@ -8,90 +8,117 @@
 #define MSG_STOP    4
 #define MSG_WAIT    5
 #define MSG_CUSTOM  6
-#define COMPASS_PORT         S1
+#define COMPASS_PORT        S1
+#define COLOR_PORT          S2
+#define LIGHT_PORT          S3
+#define US_PORT             S4
 
 #define LEFT_MOTOR           OUT_C
 #define RIGHT_MOTOR          OUT_A
 #define BOTH_MOTORS          OUT_AC
 
+#define COLOR_GREEN          4
+#define COLOR_RED            9
+#define COLOR_BLUE           3
+
+//#define 	Sin(_X)   asm { sin __FLTRETVAL__, _X }
+//#define 	Cos(_X)   asm { cos __FLTRETVAL__, _X }
+
+//WHITE : >10
+
+
+int ref_y_axis=0;
+int ref_x_axis=0;
+float dist_x=0;
+float dist_y=0;
+
 
 int dist_search=0;
+byte next_rob;
+task search();
+task explore();
 
 void joy()
 {
-   PlayTone(TONE_E4, MS_100);
-   Wait(MS_100);
-   PlayTone(TONE_G4, MS_100);
-   Wait(MS_100);
-   PlayTone(TONE_C5, MS_100);
-   Wait(MS_100);
-   PlayTone(TONE_E5, MS_100);
-   Wait(MS_100);
-   PlayTone(TONE_G5, MS_300);
-   Wait(MS_300);
-   PlayTone(TONE_E5, MS_100);
-   Wait(MS_100);
-   PlayTone(TONE_G5, SEC_1);
-   Wait(SEC_1);
-}
-byte next_rob;
-task search();
-
-void CloseTrap()
-{
-  OnFwd(OUT_B,25);
-}
-
-void OpenTrap()
-{
-  OnRev(OUT_B,25);
+  PlayTone(TONE_E4, MS_100);
+  Wait(MS_100);
+  PlayTone(TONE_G4, MS_100);
+  Wait(MS_100);
+  PlayTone(TONE_C5, MS_100);
+  Wait(MS_100);
+  PlayTone(TONE_E5, MS_100);
+  Wait(MS_100);
+  PlayTone(TONE_G5, MS_300);
+  Wait(MS_300);
+  PlayTone(TONE_E5, MS_100);
+  Wait(MS_100);
+  PlayTone(TONE_G5, SEC_1);
+  Wait(SEC_1);
 }
 
 int turn(short angle, short ref){
-     int end =0;
-     int obj=ref+angle;
-     while(obj<0){
-       obj+=360;
-     }
-     obj=obj%360;
-     int compValue=SensorHTCompass(COMPASS_PORT);
-     string msg;
+  int end =0;
+  int obj=ref+angle;
+  while(obj<0){
+    obj+=360;
+  }
+  obj=obj%360;
+  int compValue=SensorHTCompass(COMPASS_PORT);
+  string msg;
 
-     while(compValue > obj){
-        OnFwd(OUT_A, 22);// turn left
-        OnRev(OUT_C,22);
-        compValue=SensorHTCompass(COMPASS_PORT);
-     }
-     while(compValue < obj){
-        OnFwd(OUT_C, 22); // turn right
-        OnRev(OUT_A,22);
-        compValue=SensorHTCompass(COMPASS_PORT);
-     }
-     end=1;
+  while(compValue > obj){
+    OnFwd(OUT_A, 30);// turn left
+    OnRev(OUT_C,30);
+    compValue=SensorHTCompass(COMPASS_PORT);
+  }
+  while(compValue < obj){
+    OnFwd(OUT_C, 30); // turn right
+    OnRev(OUT_A,30);
+    compValue=SensorHTCompass(COMPASS_PORT);
+  }
+  end=1;
 }
 
 float speed(int pow){
-      return 0.0039*pow-0.0293;
+  return 0.0039*pow-0.0293;
+}
+
+int forward_plus(float dist, int pow, int angle){
+  float time=dist/speed(pow);
+  float alpha=(angle-ref_x_axis);
+
+  dist_x=abs(dist_x+dist*Cos(alpha)/100);
+  dist_y=abs(dist_y+dist*Sin(alpha)/100);
+
+  string deb="alpha: "+NumToStr(alpha)+" "+"distx: "+NumToStr(dist_x)+" disty: "+NumToStr(dist_y);
+  SendResponseString(MAILBOX10, deb);
+  
+  TextOut(0, LCD_LINE2, "distx: "+NumToStr(dist_x));
+  TextOut(0, LCD_LINE3, "disty: "+NumToStr(dist_y));
+  OnFwdSync(BOTH_MOTORS, pow, 0);
+  Wait(time*1000);
+  return 1;
 }
 
 int forward(float dist, int pow){
-    float time=dist/speed(pow);
-    OnFwdSync(BOTH_MOTORS, pow, 0);
-    Wait(time*1000);
-    return 1;
+  float time=dist/speed(pow);
+
+  OnFwdSync(BOTH_MOTORS, pow, 0);
+  Wait(time*1000);
+  return 1;
 }
 
 int distance()
 {
-  SetSensorUltrasonic(IN_4);
+  SetSensorUltrasonic(S4);
   int list[];
   ArrayInit(list, 0, 5);
   int cpt = 0;
   int ok = 0;
   while(list[4]==0)
   {
-    list[cpt]=SensorUS(IN_4);
-    if(list[cpt]<=9) ok++;
+    list[cpt]=SensorUS(S4);
+    if(list[cpt]<=16) ok++;
     Wait(100);
     cpt++;
   }
@@ -99,6 +126,7 @@ int distance()
   else return 0;
 
 }
+
 
 char getMessage (byte &msg[]) {
   until (BluetoothStatus(CONNECTION) == NO_ERR);  // Wait for connection
@@ -141,7 +169,6 @@ task catch()
   short refCompass;
   short compassValue=0;
   int dist=0;
-  SetSensorLowspeed(COMPASS_PORT);
 
   while(true)
   {
@@ -154,15 +181,15 @@ task catch()
     sum=sum-(sum/360)*360;
 
     refCompass=compassValue;
-/*
+    /*
     ClearScreen();
     TextOut(0, LCD_LINE5, "C: ");
     NumOut(27, LCD_LINE5, compassValue-refCompass);
 
     TextOut(0, LCD_LINE8, "S: ");
     NumOut(25, LCD_LINE8, sum);
-*/
-    dist = SensorUS(IN_4);
+    */
+    dist = SensorUS(S4);
     //TextOut(0,0,NumToStr(Sensor(S3))+NumToStr(Sensor(S4)));
     //Wait(200);
     ClearScreen();
@@ -170,60 +197,59 @@ task catch()
     NumOut(28,LCD_LINE3,dist);
     while(dist>13)
     {
-     OnFwdSync(BOTH_MOTORS, 22, -1);
-     dist= SensorUS(IN_4);
+      forward(0.02,22);
+      dist= SensorUS(S4);
     }
 
     OnFwd(OUT_B, 30);
-    OnFwdSync(BOTH_MOTORS, 19, -1);
-    Wait(150);
+    forward(0.03,15);
+
     if(distance()==1){
-       Off(OUT_ABC);
-       break;
+      Off(OUT_ABC);
+      break;
     }
     else{
       OnRev(OUT_B, 20);
       Wait(150);
     }
   }
-  
+
   int target=(sum+180);
   target=target-(target/360)*360;
   while(true)
   {
     compassValue=SensorHTCompass(COMPASS_PORT);
-/*    ClearScreen();
+    /*    ClearScreen();
     TextOut(0, LCD_LINE5, "C: ");
     NumOut(27, LCD_LINE5, compassValue);
 
     TextOut(0, LCD_LINE8, "T: ");
     NumOut(25, LCD_LINE8, target);
-*/
+    */
     // are we facing North? Make it be so!
     if (compassValue > target-1 && compassValue < target+1)
     {
-      OnFwdSync(BOTH_MOTORS, 30, 0);
-      Wait(500);
+      forward(0.05, 30);
 
     } else
     {
-        turn(target-compassValue, compassValue);
+      turn(target-compassValue, compassValue);
     }
   }
 }
 
 
- /*
-  void send_wait(byte &msg[], byte dest, byte delay, byte* id)
-  {
-    ArrayInit(msg, 0, 6);
-    msg[0] = id[0];
-    msg[1] = id[1];
-    msg[2] = 0x08;
-    msg[3] = next_rob;                    //byte or int
-    msg[4] = 0x05;
-    msg[6] = delay;
-  }
+/*
+void send_wait(byte &msg[], byte dest, byte delay, byte* id)
+{
+ArrayInit(msg, 0, 6);
+msg[0] = id[0];
+msg[1] = id[1];
+msg[2] = 0x08;
+msg[3] = next_rob;                    //byte or int
+msg[4] = 0x05;
+msg[6] = delay;
+}
 */
 
 task search()
@@ -231,113 +257,171 @@ task search()
   byte msg[];
   //msg= send_wait()
 
-  SetSensorUltrasonic(IN_4);
   OnRev(OUT_B,25);
   Wait(200);
-  float list[];
+  int list[];
   int i=0;
   ArrayInit(list, 0, 360);
   for(i;i<360;i++)
   {
-    list[i]=SensorUS(IN_4);
-    TurnRight(1);
+    list[i]=SensorUS(S4);
+    turn(2, SensorHTCompass(COMPASS_PORT));
     Wait(110/4);
     if(i!=0){
-       ClearScreen();
-       TextOut(0, LCD_LINE3, "%: ");
-       NumOut(25, LCD_LINE3, (list[i-1]-list[i])/list[i-1]);
-       if(abs((list[i-1]-list[i])/list[i-1])>0.3){
+      ClearScreen();
+      TextOut(0, LCD_LINE3, "%: ");
+      NumOut(25, LCD_LINE3, (list[i-1]-list[i])/list[i-1]);
+      if(abs((list[i-1]-list[i])/list[i-1])>0.3){
         dist_search=list[i];
-        break;
-       }
+        Off(OUT_B);
+        ExitTo(catch);  // Surement une balle, on lance catch.
+      }
     }
   }
-  // penser a sortir, no infinite maggle
-  Off(OUT_B);
-  ExitTo(catch);
+  ExitTo(explore);
+  // Pas de balle d�tect�e, task finie.
 }
 
 /*
 task listen()
 {
-  if (BluetoothStatus(CONNECTION) != NO_ERR)
-  StopAllTasks ();
-  else
-  TextOut(0, LCD_LINE1, "Conn Success!  ");
+if (BluetoothStatus(CONNECTION) != NO_ERR)
+StopAllTasks ();
+else
+TextOut(0, LCD_LINE1, "Conn Success!  ");
 
-  // Wait for START message
-  TextOut(0, LCD_LINE2,       "Waiting Msg...");
-  byte msg[];
-  until (getMessage (msg))
-  Wait (100);
+// Wait for START message
+TextOut(0, LCD_LINE2,       "Waiting Msg...");
+byte msg[];
+until (getMessage (msg))
+Wait (100);
 
-  NumOut(0, LCD_LINE3, msg[4]);
-  byte previous = 0xFF;
-  byte next = 0xFF;
-  byte rank = 0;
-  byte length = 0;
+NumOut(0, LCD_LINE3, msg[4]);
+byte previous = 0xFF;
+byte next = 0xFF;
+byte rank = 0;
+byte length = 0;
 
-  if (msg[4] == MSG_START) {
-    TextOut(0, LCD_LINE2,   "START !!!     ");
-    rank = msg[5];
-    length = msg[6];
-    previous = msg[7];
-    next_rob = msg[8];
-  }
+if (msg[4] == MSG_START) {
+TextOut(0, LCD_LINE2,   "START !!!     ");
+rank = msg[5];
+length = msg[6];
+previous = msg[7];
+next_rob = msg[8];
+}
 
-  Wait (50);
+Wait (50);
 
-  if (rank==0)
-  {
-    StartTask(search);
-  }
+if (rank==0)
+{
+StartTask(search);
+}
 
-  if (rank != length-1) {
-    // we are not the last robot
-    byte actionMsg[];
-    ArrayInit(actionMsg,0,10);
-    actionMsg[0] = 0x00;
-    actionMsg[1] = 0x00;
-    actionMsg[2] = 0x00;        // ID of the team
-    actionMsg[3] = next;
-    actionMsg[4] = MSG_ACTION;
+if (rank != length-1) {
+// we are not the last robot
+byte actionMsg[];
+ArrayInit(actionMsg,0,10);
+actionMsg[0] = 0x00;
+actionMsg[1] = 0x00;
+actionMsg[2] = 0x00;        // ID of the team
+actionMsg[3] = next;
+actionMsg[4] = MSG_ACTION;
 
-    actionMsg[5] = 90;          // angle 90 degree
-    actionMsg[6] = 0x00;
+actionMsg[5] = 90;          // angle 90 degree
+actionMsg[6] = 0x00;
 
-    actionMsg[7] = 10;          // dist 10cm
+actionMsg[7] = 10;          // dist 10cm
 
-    actionMsg[8] = 20;          // speed 20mm/s
-    actionMsg[9] = 0x00;
+actionMsg[8] = 20;          // speed 20mm/s
+actionMsg[9] = 0x00;
 
-    sendMessage (actionMsg);
-  }
+sendMessage (actionMsg);
+}
 
-  Wait (5000);
+Wait (5000);
 }
 */
 
 
 task testUS(){
-   SetSensorUltrasonic(IN_4);
-   int lol;
-   while(true){
-    Wait(300);
-    lol= SensorUS(IN_4);
+  SetSensorUltrasonic(S4);
+  int lol;
+  while(true){
+    lol= SensorUS(S4);
+    ClearScreen();
     NumOut(0, LCD_LINE3, lol);
-    //ClearScreen();
-    }
- }
- 
-task turnff(){
-     SetSensorLowspeed(COMPASS_PORT);
-     turn(-90, SensorHTCompass(COMPASS_PORT));
-     turn(+180, SensorHTCompass(COMPASS_PORT));
+    Wait(1000);
+  }
 }
- 
+
+task turnff(){
+  turn(-90, SensorHTCompass(COMPASS_PORT));
+  turn(+180, SensorHTCompass(COMPASS_PORT));
+}
+
+task colorff(){
+  string msg1="C: "+NumToStr(SensorHTColorNum(COLOR_PORT));
+  string msg2="L: "+NumToStr(Sensor(LIGHT_PORT));
+  while(true){
+    ClearScreen();
+    msg1="C: "+NumToStr(SensorHTColorNum(COLOR_PORT));
+    msg2="L: "+NumToStr(Sensor(LIGHT_PORT));
+    TextOut(0, LCD_LINE2, msg1);
+    TextOut(0, LCD_LINE4, msg2);
+    Wait(1500);
+  }
+}
+
+task explore(){
+  int usVal=0;
+  int colVal=0;
+  int compVal=0;
+  int sum=0;
+  bool end=false;
+
+  string debug;
+
+  turn(100, SensorHTCompass(COMPASS_PORT)); // direction approx. premiere balle
+  forward(0.20, 25);
+
+  while(true){
+    usVal=SensorUS(US_PORT);
+    colVal=Sensor(COLOR_PORT);
+    compVal=SensorHTCompass(COMPASS_PORT);
+
+    debug="US: "+NumToStr(usVal)+"cV: "+NumToStr(compVal);
+    ClearScreen();
+    TextOut(0, LCD_LINE3, debug);
+
+    forward(0.04, 25);
+
+    if(usVal < 30){   // quelque chose est devant nous : une balle? On lance search.
+      ExitTo(search);
+    }
+  }
+}
+
+task home(){
+  TextOut(0, LCD_LINE6, "Refy: "+NumToStr(SensorHTCompass(COMPASS_PORT)));
+  ref_y_axis=SensorHTCompass(COMPASS_PORT);
+  ref_x_axis=ref_y_axis+90;
+
+  turn(37, ref_y_axis);
+  TextOut(0, LCD_LINE7, "Ang: "+NumToStr(SensorHTCompass(COMPASS_PORT)));
+  forward_plus(0.70, 40, SensorHTCompass(COMPASS_PORT));
+
+  turn(-SensorHTCompass(COMPASS_PORT)+ref_y_axis+180, SensorHTCompass(COMPASS_PORT));
+  forward(dist_y, 40);
+  turn(90, SensorHTCompass(COMPASS_PORT));
+  forward(dist_x, 40);
+}
+
 task main()
 {
-     //Precedes(turnff);
-    //Precedes(search);
-    //forward(0.3, 35);
+  SetSensorUltrasonic(US_PORT);
+  SetSensorLowspeed(COMPASS_PORT);
+  SetSensorLowspeed(COLOR_PORT);
+  SetSensorLight(LIGHT_PORT, false);
+
+  Precedes(home);
 }
