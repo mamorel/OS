@@ -23,21 +23,29 @@
 #define COLOR_GREEN          4
 #define COLOR_RED            9
 #define COLOR_BLUE           3
+//WHITE : >10
+
+#define SERV    1
+
 
 //#define 	Sin(_X)   asm { sin __FLTRETVAL__, _X }
 //#define 	Cos(_X)   asm { cos __FLTRETVAL__, _X }
-
-//WHITE : >10
-
 
 int ref_y_axis=0;
 int ref_x_axis=0;
 float dist_x=0;
 float dist_y=0;
 
-
 int dist_search=0;
+
 byte next_rob;
+byte msg[];
+byte msgOut[];
+byte id[];
+
+mutex msgOutMutex;
+
+
 task search();
 task explore();
 
@@ -59,6 +67,98 @@ void joy()
   Wait(SEC_1);
 }
 
+
+char getMessage (byte &msg[]) {
+  until (BluetoothStatus(CONNECTION) == NO_ERR);  // Wait for connection
+  string __msg;
+  char r = ReceiveMessage(0,1,__msg);
+  if (r != 0)
+  return 0;
+
+  ArrayInit(msg,0,59);
+  StrToByteArray (__msg, msg);
+  r = ArrayLen(msg);
+  if (r < 5)
+  return 0;
+
+  return r;
+}
+
+void sendMessage (byte msg[]) {
+  CommBTWriteType args2;
+  args2.Connection = CONNECTION;
+  args2.Buffer= ByteArrayToStr (msg);
+
+  SysCommBTWrite(args2);
+  TextOut(0, LCD_LINE2,       "Trying to write");
+  while (BluetoothStatus (CONNECTION) == STAT_COMM_PENDING)
+  Wait (10);
+
+  if (BluetoothStatus (CONNECTION) == NO_ERR)
+  TextOut(0, LCD_LINE2,   "Write Done     ");
+  else
+  TextOut(0, LCD_LINE2,   "Write Failed   ");
+}
+
+int send_wait(byte dest, float delay)
+{
+  string del=FlattenVar(delay);
+  string deb="delay: "+NumToStr(delay)+"length del: "+NumToStr(ArrayLen(del))+"del[0]: "+del[0]+"del[1]: "+del[1];
+  SendResponseString(MAILBOX10, deb);
+  ArrayInit(msgOut, 0, 6);
+  msgOut[0] = id[0];
+  msgOut[1] = id[1];
+  msgOut[2] = 0x08;
+  msgOut[3] = next_rob;                    //byte or int
+  msgOut[4] = MSG_WAIT;
+  msgOut[6] = del[0];
+
+  sendMessage(msgOut);
+  return 1;
+}
+
+int send_action(byte dest, int angle, int dist, int speed){
+  string ang=FlattenVar(angle); // Int to string
+  dist=dist*100; // dist in cm not m.
+  string di=FlattenVar(dist);
+  speed=speed*1000; // speed in mm.s-1 not m.s-1
+  string spee=FlattenVar(speed);
+
+  string deb1="angle: "+NumToStr(angle)+"ang[0]: "+ang[0]+" ang[1]: "+ang[1];
+  string deb2="speed: "+NumToStr(speed)+"spee[0]: "+spee[0]+" spee[1]: "+spee[1];
+  string deb3="dist: "+NumToStr(dist)+"di: "+di[0];
+  SendResponseString(MAILBOX10, deb1);
+  SendResponseString(MAILBOX10, deb2);
+  SendResponseString(MAILBOX10, deb3);
+
+  ArrayInit(msgOut, 0, 10);
+  msgOut[0]=id[0];
+  msgOut[1]=id[1];
+  msgOut[2]=ACHILLE;
+  msgOut[3]=dest,
+  msgOut[4]=MSG_ACTION;
+  msgOut[5]=ang[0];
+  msgOut[6]=ang[1];
+  msgOut[7]=di;
+  msgOut[8]=spee[0];
+  msgOut[9]=spee[1];
+
+  sendMessage(msgOut);
+  return 1;
+}
+
+int send_lead(byte dest){
+  ArrayInit(msgOut, 0, 5);
+  msgOut[0]=id[0];
+  msgOut[1]=id[1];
+  msgOut[2]=ACHILLE;
+  msgOut[3]=dest;
+  msgOut[4]=MSG_LEAD;
+
+  sendMessage(msgOut);
+  return 1;
+}
+
 int turn(short angle, short ref){
   int end =0;
   int obj=ref+angle;
@@ -66,8 +166,14 @@ int turn(short angle, short ref){
     obj+=360;
   }
   obj=obj%360;
+
   int compValue=SensorHTCompass(COMPASS_PORT);
-  string msg;
+
+  #ifdef SERV
+    Acquire(msgOutMutex);                         // delay in sec !!??? Need to send a wait msg?
+    send_wait(next_rob, abs(compValue-obj)/90);   // Approx
+    Release(msgOutMutex);
+  #endif
 
   while(compValue > obj){
     OnFwd(OUT_A, 30);// turn left
@@ -89,6 +195,12 @@ float speed(int pow){
 int forward_plus(float dist, int pow, int angle){
   float time=dist/speed(pow);
   float alpha=(angle-ref_x_axis);
+
+  #ifdef SERV
+    Acquire(msgOutMutex);
+    send_action(next_rob, angle-ref_y_axis, dist, speed(pow)); // angle=curr_angle-angle_init
+    Release(msgOutMutex);
+  #endif
 
   dist_x=dist_x+dist*Cos(alpha)/100;
   dist_y=dist_y+dist*Sin(alpha)/100;
@@ -128,39 +240,6 @@ int distance()
   if(ok>=3) return 1;
   else return 0;
 
-}
-
-
-char getMessage (byte &msg[]) {
-  until (BluetoothStatus(CONNECTION) == NO_ERR);  // Wait for connection
-  string __msg;
-  char r = ReceiveMessage(0,1,__msg);
-  if (r != 0)
-  return 0;
-
-  ArrayInit(msg,0,59);
-  StrToByteArray (__msg, msg);
-  r = ArrayLen(msg);
-  if (r < 5)
-  return 0;
-
-  return r;
-}
-
-void sendMessage (byte msg[]) {
-  CommBTWriteType args2;
-  args2.Connection = CONNECTION;
-  args2.Buffer= ByteArrayToStr (msg);
-
-  SysCommBTWrite(args2);
-  TextOut(0, LCD_LINE2,       "Trying to write");
-  while (BluetoothStatus (CONNECTION) == STAT_COMM_PENDING)
-  Wait (10);
-
-  if (BluetoothStatus (CONNECTION) == NO_ERR)
-  TextOut(0, LCD_LINE2,   "Write Done     ");
-  else
-  TextOut(0, LCD_LINE2,   "Write Failed   ");
 }
 
 
@@ -242,19 +321,6 @@ task catch()
 }
 
 
-/*
-void send_wait(byte &msg[], byte dest, byte delay, byte* id)
-{
-ArrayInit(msg, 0, 6);
-msg[0] = id[0];
-msg[1] = id[1];
-msg[2] = 0x08;
-msg[3] = next_rob;                    //byte or int
-msg[4] = 0x05;
-msg[6] = delay;
-}
-*/
-
 task search()
 {
   byte msg[];
@@ -296,8 +362,6 @@ task listen()
   // Wait for START message
   TextOut(0, LCD_LINE2,       "Waiting Msg...");
 
-  byte msg[];
-  
   while(true){
     until (getMessage (msg))
     if(msg[4]==MSG_START && msg[3]==ACHILLE){
@@ -343,21 +407,27 @@ task listen()
 
   while(true){
     while(!getMessage(msg)){}
-    if(msg[4]==MSG_STOP){
+
+    if(msg[4]==MSG_STOP){   // STOP MSG received
       StopAllTasks();
     }
-    if(msg[4]== MSG_KICK){
+
+    if(msg[4]== MSG_KICK){    // KICK MSG received
       if(msg[3]==ACHILLE){
         StopAllTasks();
       }
       if(msg[5]==0 && msg[7]==ACHILLE){
-        // Stop follower and Start explore
+        // Stop follower and Start explore we are the leader now.
       }
       if(msg[5]==rank+1){
         // New follower -> get its id.
       }
     }
 
+    if(msg[4]==MSG_LEAD && msg[3]==ACHILLE){    // We are the leader now.
+      // Stop follower
+      // Start explore
+    }
 
   }
 }
@@ -430,6 +500,9 @@ task home(){
   turn(37, ref_y_axis);
   TextOut(0, LCD_LINE7, "Ang: "+NumToStr(SensorHTCompass(COMPASS_PORT)));
   forward_plus(0.70, 40, SensorHTCompass(COMPASS_PORT));
+
+  turn(-60, SensorHTCompass(COMPASS_PORT));
+  forward_plus(0.50, 40, SensorHTCompass(COMPASS_PORT));
 
   if(dist_y > 0){
     turn(-SensorHTCompass(COMPASS_PORT)+ref_y_axis+180, SensorHTCompass(COMPASS_PORT));
