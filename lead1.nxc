@@ -329,12 +329,32 @@ task search()
   OnRev(OUT_B,25);
   Wait(200);
   int list[];
+  int compt=0;
   int i=0;
   ArrayInit(list, 0, 360);
-  for(i;i<360;i++)
+  for(i;i<15;i++)
   {
     list[i]=SensorUS(S4);
     turn(2, SensorHTCompass(COMPASS_PORT));
+    Wait(110/4);
+    if(i!=0){
+      ClearScreen();
+      TextOut(0, LCD_LINE3, "%: ");
+      NumOut(25, LCD_LINE3, (list[i-1]-list[i])/list[i-1]);
+      if(abs((list[i-1]-list[i])/list[i-1])>0.3){
+        dist_search=list[i];
+        Off(OUT_B);
+        compt=i;
+        ExitTo(catch);  // Surement une balle, on lance catch.
+      }
+    }
+  }
+turn(-compt*i, SensorHTCompass(COMPASS_PORT));
+wait(100*compt/4);
+for(i;i<15;i++)
+  {
+    list[i]=SensorUS(S4);
+    turn(-2, SensorHTCompass(COMPASS_PORT));
     Wait(110/4);
     if(i!=0){
       ClearScreen();
@@ -348,7 +368,7 @@ task search()
     }
   }
   ExitTo(explore);
-  // Pas de balle d�tect�e, task finie.
+  // Pas de balle d?tect?e, task finie.
 }
 
 
