@@ -46,6 +46,7 @@ byte id[];
 
 mutex msgOutMutex;
 
+task exploreFreely();
 task search();
 task explore();
 
@@ -264,7 +265,7 @@ task catch()
 
   while(true)
   {
-    lightVal=Sensor(LIGHT_PORT);
+    lightVal=Sensor(LIGHT_PORT);                // Mur -> exit to exploreFreely
         if(lightVal >= 6 && lightVal <= 9){
            ExitTo(exploreFreely);
         }
@@ -278,9 +279,15 @@ task catch()
     {
       forward_plus(0.02,40, SensorHTCompass(COMPASS_PORT));
       dist= SensorUS(S4);
+      lightVal=Sensor(LIGHT_PORT);                // Mur -> exit to exploreFreely
+      if(lightVal >= 6 && lightVal <= 9){
+         ExitTo(exploreFreely);
+      }
     }
 
-    OnFwd(OUT_B, 30);
+    OnFwd(OUT_B, 35);
+    Wait(550);
+    Off(OUT_B);
     forward_plus(0.03,22, SensorHTCompass(COMPASS_PORT));
 
     if(distance()==1){
@@ -301,12 +308,14 @@ task catch()
   }
   forward(dist_y, 40);
   if(dist_x>0){
-    turn(-90, SensorHTCompass(COMPASS_PORT));
+    turn(-SensorHTCompass(COMPASS_PORT)+ref_x_axis+180, SensorHTCompass(COMPASS_PORT));
   }else{
     dist_x=-dist_x;
-    turn(+90, SensorHTCompass(COMPASS_PORT));
+    turn(-SensorHTCompass(COMPASS_PORT)+ref_x_axis, SensorHTCompass(COMPASS_PORT));
   }
   forward(dist_x, 40);
+  OnRev(OUT_B, 60);
+  Wait(150);
 }
 
 
@@ -321,17 +330,22 @@ task search()
   int i=0;
   int init=SensorHTCompass(COMPASS_PORT);
   turn(-30, init);
+  string deb;
   
   ArrayInit(list, 0, 60);
   for(i;i<60;i++)
   {
     list[i]=SensorUS(S4);
+    deb="Value: "+NumToStr(list[i]);
+    ClearScreen();
+    TextOut(0, LCD_LINE3, deb);
     turn(1, SensorHTCompass(COMPASS_PORT));
-    Wait(50);
+    Wait(5);
     if(i!=0){
       ClearScreen();
       TextOut(0, LCD_LINE3, "%: "+NumToStr((list[i-1]-list[i])/list[i-1]));
-      if(abs((list[i-1]-list[i])/list[i-1])>0.6){
+      if(abs((list[i-1]-list[i])/list[i-1])>0.5){
+        turn(-3, SensorHTCompass(COMPASS_PORT));
         dist_search=list[i];
         Off(OUT_B);
         ExitTo(catch);  // Surement une balle, on lance catch.
@@ -374,7 +388,7 @@ task listen()
 
   if (rank==0) // Leader -> exploration de l'arene
   {
-    StartTask(search);
+    StartTask(exploreFreely);
   }
      /*
   if (rank != length-1) {
@@ -503,12 +517,12 @@ task exploreFreely(){
            compt=0;
            ExitTo(search);
         }
-        forward(0.05, 30);
+        forward_plus(0.05, 30, SensorHTCompass(COMPASS_PORT));
         usVal=SensorUS(US_PORT);
         colVal=SensorHTColorNum(COLOR_PORT);
         compVal=SensorHTCompass(COMPASS_PORT);
         lightVal=Sensor(LIGHT_PORT);
-        deb="US: "+NumToStr(usVal)+"comp: "+NumToStr(compVal);
+        /*deb="US: "+NumToStr(usVal)+"comp: "+NumToStr(compVal);
         deb2="light: "+NumToStr(lightVal);
         ClearScreen();
         TextOut(0, LCD_LINE3, deb);
@@ -516,7 +530,7 @@ task exploreFreely(){
         TextOut(0, LCD_LINE5, deb2);
         SendResponseString(MAILBOX10, deb2);
         TextOut(0, LCD_LINE1, deb3);
-
+        */
         
         if(lightVal >= 6 && lightVal <= 9){
            if(compVal >= ref_y_axis - 30  && compVal <= ref_y_axis + 30){
@@ -588,5 +602,5 @@ task main()
   ref_y_axis=SensorHTCompass(COMPASS_PORT);
   ref_x_axis=ref_y_axis+90;
 
-  Precedes(listen);
+  Precedes(exploreFreely);
 }
