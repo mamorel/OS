@@ -269,9 +269,9 @@ task catch()
         if(colVal >= 6 && colVal <= 9){
            ExitTo(exploreFreely);
         }
-        
+
     dist = SensorUS(S4);
-    
+
     ClearScreen();
     TextOut(0,LCD_LINE3, "Dist: ");
     NumOut(28,LCD_LINE3,dist);
@@ -300,6 +300,7 @@ task catch()
     }
   }
 
+// Return init position
   if(dist_y > 0){
     turn(-SensorHTCompass(COMPASS_PORT)+ref_y_axis, SensorHTCompass(COMPASS_PORT));
   }else{
@@ -320,6 +321,59 @@ task catch()
   joy();
 }
 
+int get_min_angle(){
+  int origin = SensorHTCompass(COMPASS_PORT); // initial position
+  turn(-30, origin);
+
+  int i=0;
+  int dist_list[];
+  int ang_list[];
+  ArrayInit(dist_list, 0, 60);
+  ArrayInit(ang_list, 0, 60);
+  for(i; i<60; i++){
+    dist_list[i]=SensorUS(US_PORT);
+    ang_list[i]=SensorHTCompass(COMPASS_PORT);
+    turn(1, ang_list[i]);
+    Wait(5);
+  }
+
+  int min_index=0;
+  i=0:
+  for(i; i<60; i++){
+    if(dist_list[i] < dist_list[min_index]){
+      if((abs(dist_list[i]-dist_list[i-1]) < 5) || (abs(dist_list[i]-dist_list[i+1]) < 5)){
+        min_index=i;
+      }
+    }
+  }
+
+  turn(-30, SensorHTCompass(COMPASS_PORT)); // Go back to init pos
+  return ang_list[min_index];
+}
+
+task new_search(){
+  OnRev(OUT_B, 25);
+  Wait(200);
+
+
+  int angle_min = get_min_angle(); // scan and get the angle with the nearest object
+  turn(-SensorHTCompass(COMPASS_PORT)+angle_min, SensorHTCompass(COMPASS_PORT)); // Turn to go on the direction computed just before
+  int dist_min = SensorUS(US_PORT); // The ball should be in front of us, dist_min cm away
+  forward_plus(dist_min/200, 30, SensorHTcompass(COMPASS_PORT)); // we should be closer to the ball now
+
+  // scan again
+  int new_angle_min = get_min_angle();
+
+  int diff = abs(angle_min-new_angle_min);
+  turn(-SensorHTCompass(COMPASS_PORT)+new_angle_min, SensorHTCompass(COMPASS_PORT));
+
+  if(diff < 3){ // something in this direction!
+    ExitTo(catch);
+  }else{
+    ExitTo(exploreFreely);
+  }
+}
+
 
 task search()
 {
@@ -336,7 +390,7 @@ task search()
   int init=SensorHTCompass(COMPASS_PORT);
   turn(-30, init);
   string deb;
-  
+
   ArrayInit(test,0 ,6);
   ArrayInit(list, 0, 60);
   for(i;i<60;i++)
@@ -439,7 +493,7 @@ task listen()
     if(msg[4]==MSG_STOP){   // STOP MSG received
       StopAllTasks();
     }
-    
+
 
     if(msg[4]==MSG_WAIT){   // STOP MSG received
       w8_time=msg[5];
@@ -460,8 +514,8 @@ task listen()
       // Stop follower
       // Start explore
     }
-    
-      if(msg[4]==0x00 && rank !=0)    // le message ACTION nous est adressé
+
+      if(msg[4]==0x00 && rank !=0)    // le message ACTION nous est adressï¿½
      {
        angle= 256*msg[6]+msg[5];
        dist=msg[7];  //in cm!!!
@@ -526,10 +580,10 @@ task exploreFreely(){
      TextOut(0, LCD_LINE3, deb);
      SendResponseString(MAILBOX10, deb);
      */
-     turn(50, SensorHTCompass(COMPASS_PORT));                           // Première balle !!!
+     turn(50, SensorHTCompass(COMPASS_PORT));                           // Premiï¿½re balle !!!
      forward_plus(0.28, 30, SensorHTCompass(COMPASS_PORT));
      ExitTo(search);
-     
+
      while(true){
         compt+=1;
         if(compt==8){
@@ -550,7 +604,7 @@ task exploreFreely(){
         SendResponseString(MAILBOX10, deb2);
         TextOut(0, LCD_LINE1, deb3);
         */
-        
+
         if(colVal >= 6 && colVal <= 9){
            if(compVal >= ref_y_axis - 30  && compVal <= ref_y_axis + 30){
               turn(-compVal+ref_x_axis+15, compVal);
@@ -580,7 +634,7 @@ task exploreFreely(){
            }
 
         }
-        
+
      }
 }
 
