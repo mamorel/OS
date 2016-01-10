@@ -13,7 +13,7 @@
 
 #define COMPASS_PORT        S1
 #define COLOR_PORT          S2
-#define LIGHT_PORT          S3
+#define TOUCH_PORT          S3
 #define US_PORT             S4
 
 #define LEFT_MOTOR           OUT_C
@@ -321,7 +321,12 @@ task catch()
   joy();
 }
 
-int get_min_angle(){
+struct mins{
+  int angle;
+  int dist;
+};
+
+mins get_min_dist(){
   int origin = SensorHTCompass(COMPASS_PORT); // initial position
   turn(-30, origin);
 
@@ -329,16 +334,19 @@ int get_min_angle(){
   int dist_list[];
   int ang_list[];
   ArrayInit(dist_list, 0, 60);
+  string d;
   ArrayInit(ang_list, 0, 60);
   for(i; i<60; i++){
     dist_list[i]=SensorUS(US_PORT);
+    d=NumToStr(i)+" : "+NumToStr(dist_list[i]);
+    SendResponseString(MAILBOX10, d);
     ang_list[i]=SensorHTCompass(COMPASS_PORT);
     turn(1, ang_list[i]);
-    Wait(5);
+    Wait(500);
   }
 
   int min_index=0;
-  i=0:
+  i=0;
   for(i; i<60; i++){
     if(dist_list[i] < dist_list[min_index]){
       if((abs(dist_list[i]-dist_list[i-1]) < 5) || (abs(dist_list[i]-dist_list[i+1]) < 5)){
@@ -347,8 +355,11 @@ int get_min_angle(){
     }
   }
 
-  turn(-30, SensorHTCompass(COMPASS_PORT)); // Go back to init pos
-  return ang_list[min_index];
+  turn(-60-SensorHTCompass(COMPASS_PORT)+ang_list[min_index], SensorHTCompass(COMPASS_PORT)); //Go in the computed drectionn
+  mins res;
+  res.angle=ang_list[min_index];
+  res.dist=dist_list[min_index];
+  return res;
 }
 
 task new_search(){
@@ -356,21 +367,33 @@ task new_search(){
   Wait(200);
 
 
-  int angle_min = get_min_angle(); // scan and get the angle with the nearest object
-  turn(-SensorHTCompass(COMPASS_PORT)+angle_min, SensorHTCompass(COMPASS_PORT)); // Turn to go on the direction computed just before
-  int dist_min = SensorUS(US_PORT); // The ball should be in front of us, dist_min cm away
-  forward_plus(dist_min/200, 30, SensorHTcompass(COMPASS_PORT)); // we should be closer to the ball now
+  mins res = get_min_dist(); // scan and get the angle with the nearest object
+  //turn(-SensorHTCompass(COMPASS_PORT)+angle_min, SensorHTCompass(COMPASS_PORT)); // Turn to go on the direction computed just before
+  //int dist_min = SensorUS(US_PORT); // The ball should be in front of us, dist_min cm away
+  TextOut(0, LCD_LINE5, NumToStr(res.dist));
+  string so = "dist_min: "+NumToStr(res.dist);
+  SendResponseString(MAILBOX10, so);
+
+  forward_plus(res.dist/200, 30, SensorHTCompass(COMPASS_PORT)); // we should be closer to the ball now
 
   // scan again
-  int new_angle_min = get_min_angle();
+  mins new_mins = get_min_dist();
 
-  int diff = abs(angle_min-new_angle_min);
-  turn(-SensorHTCompass(COMPASS_PORT)+new_angle_min, SensorHTCompass(COMPASS_PORT));
+  int diff = abs(res.angle-new_mins.angle);
+  SendResponseString(MAILBOX10, "Diff: "+NumToStr(diff));
+  //turn(-SensorHTCompass(COMPASS_PORT)+new_angle_min, SensorHTCompass(COMPASS_PORT));
 
   if(diff < 3){ // something in this direction!
-    ExitTo(catch);
+    TextOut(0, LCD_LINE2, "Trouve");
+    //ExitTo(catch);
+  }
+  if(SensorUS(US_PORT) < 18){
+    TextOut(0, LCD_LINE3, "Coucou");
+    Wait(5000);
   }else{
-    ExitTo(exploreFreely);
+    //ExitTo(exploreFreely);
+    TextOut(0, LCD_LINE2, "NOP");
+    Wait(5000);
   }
 }
 
@@ -548,12 +571,12 @@ task turnff(){
 
 task colorff(){
   string msg1="C: "+NumToStr(SensorHTColorNum(COLOR_PORT));
-  string msg2="L: "+NumToStr(Sensor(LIGHT_PORT));
+  string msg2="L: "+NumToStr(Sensor(TOUCH_PORT));
   int color=0;
   while(true){
     color=SensorHTColorNum(COLOR_PORT);
     msg1=NumToStr(color);
-    msg2="L: "+NumToStr(Sensor(LIGHT_PORT));
+    msg2="L: "+NumToStr(Sensor(TOUCH_PORT));
     SendResponseString(MAILBOX10, msg1);
     TextOut(0, LCD_LINE4, msg2);
     Wait(150);
@@ -571,7 +594,7 @@ task exploreFreely(){
      int usVal=0;
      int colVal=0;
      int compVal=0;
-     int lightVal=0;
+     int touchVal=0;
 /*   string gfgf="";
      string deb="US: "+NumToStr(usVal)+"cV: "+NumToStr(compVal);
      string deb2="light: "+NumToStr(lightVal);
@@ -594,7 +617,7 @@ task exploreFreely(){
         usVal=SensorUS(US_PORT);
         colVal=SensorHTColorNum(COLOR_PORT);
         compVal=SensorHTCompass(COMPASS_PORT);
-        lightVal=Sensor(LIGHT_PORT);
+
         /*deb="US: "+NumToStr(usVal)+"comp: "+NumToStr(compVal);
         deb2="light: "+NumToStr(lightVal);
         ClearScreen();
@@ -666,14 +689,18 @@ task home(){
   forward(dist_x, 40);
 }
 
+task touchff(){
+
+}
+
 task main()
 {
   SetSensorUltrasonic(US_PORT);
   SetSensorLowspeed(COMPASS_PORT);
   SetSensorLowspeed(COLOR_PORT);
-  SetSensorLight(LIGHT_PORT, false);
+  SetSensorTouch(TOUCH_PORT);
   ref_y_axis=SensorHTCompass(COMPASS_PORT);
   ref_x_axis=ref_y_axis+90;
 
-  Precedes(exploreFreely);
+  Precedes(new_search);
 }
