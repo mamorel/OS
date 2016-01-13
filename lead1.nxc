@@ -47,7 +47,7 @@ task exploreFreely();
 task search();
 task explore();
 
-/*
+
 void joy()
 {
   PlayTone(TONE_E4, MS_100);
@@ -64,7 +64,7 @@ void joy()
   Wait(MS_100);
   PlayTone(TONE_G5, SEC_1);
   Wait(SEC_1);
-}*/
+}
 
 
 char getMessage (byte &msg[]) {
@@ -173,7 +173,7 @@ int send_lead(byte dest){
 }
 
 
-int turn(short angle, short ref){
+int turn(int angle, int ref){
   int end =0;
   int obj=ref+angle;
   while(obj<0){
@@ -182,6 +182,7 @@ int turn(short angle, short ref){
   obj=obj%360;
 
   int compValue=SensorHTCompass(COMPASS_PORT);
+  int initValue=compValue;
     /*
   #ifdef SERV
     Acquire(msgOutMutex);                         // delay in sec !!??? Need to send a wait msg?
@@ -205,7 +206,42 @@ int turn(short angle, short ref){
       OnRev(OUT_A,40);
       compValue=SensorHTCompass(COMPASS_PORT);
     }
-  }else{
+  }
+  else if(initValue+angle > 360){
+   while(compValue > 2){
+    OnFwd(OUT_C, 40);
+    OnRev(OUT_A, 40);
+    compValue=SensorHTCompass(COMPASS_PORT);
+   }
+         while(compValue > obj){
+      OnFwd(OUT_A, 40);// turn left
+      OnRev(OUT_C,40);
+      compValue=SensorHTCompass(COMPASS_PORT);
+    }
+    while(compValue < obj){
+      OnFwd(OUT_C, 40); // turn right
+      OnRev(OUT_A,40);
+      compValue=SensorHTCompass(COMPASS_PORT);
+    }
+  }
+  else if(initValue+angle < 0){
+    while(compValue < 358){
+           OnFwd(OUT_A, 40);// turn left
+      OnRev(OUT_C,40);
+      compValue=SensorHTCompass(COMPASS_PORT);
+    }
+             while(compValue > obj){
+      OnFwd(OUT_A, 40);// turn left
+      OnRev(OUT_C,40);
+      compValue=SensorHTCompass(COMPASS_PORT);
+    }
+    while(compValue < obj){
+      OnFwd(OUT_C, 40); // turn right
+      OnRev(OUT_A,40);
+      compValue=SensorHTCompass(COMPASS_PORT);
+    }
+  }
+  else{
   test="2";
   SendResponseString(MAILBOX10, test);
       while(compValue < obj){
@@ -233,7 +269,7 @@ int speed_to_pow(float speed) {
 
 
 float forward_plus(float dist, int pow, int angle){
-  float time=dist/speed(pow)*1000;
+  float time=abs(dist)/speed(pow)*1000;
   float alpha=(angle-ref_x_axis);
   int colVal, usVal, touchVal;
 /*
@@ -243,19 +279,24 @@ float forward_plus(float dist, int pow, int angle){
     Release(msgOutMutex);
   #endif
 */
+
   dist_x=dist_x+dist*Cos(alpha)/100;
   dist_y=dist_y+dist*Sin(alpha)/100;
 
   string deb="alpha: "+NumToStr(alpha)+" "+"distx: "+NumToStr(dist_x)+" disty: "+NumToStr(dist_y);
   SendResponseString(MAILBOX10, deb);
 
-  //TextOut(0, LCD_LINE2, "distx: "+NumToStr(dist_x));
-  //TextOut(0, LCD_LINE3, "disty: "+NumToStr(dist_y));
+  TextOut(0, LCD_LINE2, "distx: "+NumToStr(dist_x));
+  TextOut(0, LCD_LINE3, "disty: "+NumToStr(dist_y));
 
-  long tmp=0;
+  float tmp=0;
   long t1;
   while(tmp < time){
+     if(dist>0){
      OnFwdSync(BOTH_MOTORS, pow, 0);
+     }else{
+     OnRevSync(BOTH_MOTORS, pow, 0);
+     }
      t1=CurrentTick();
      if(w8_time != 0){   // we need to wait
        Off(BOTH_MOTORS);
@@ -266,7 +307,12 @@ float forward_plus(float dist, int pow, int angle){
      usVal=SensorHTCompass(COMPASS_PORT);
      touchVal=Sensor(TOUCH_PORT);
      if( (colVal >= 6 && colVal <= 9) || (usVal < 22) || (touchVal==1) ){    // Something in front of us -> exit and return the distance covered
+       TextOut(0, LCD_LINE3, "ABORT FWD_PLUS");
+       if(dist>0){
        return tmp*speed(pow);
+       }else{
+       return -tmp*speed(pow);
+       }
      }
      Wait(200);
      tmp=tmp+200+CurrentTick()- t1;
@@ -797,9 +843,25 @@ task touchff(){
 
 
 
-task turnff(){
-  turn(90, SensorHTCompass(COMPASS_PORT));
-  turn(90, SensorHTCompass(COMPASS_PORT));
+task forwardff(){
+  //forward_plus(0.30, 40, SensorHTCompass(COMPASS_PORT));
+  turn(45, SensorHTCompass(COMPASS_PORT));
+  string a = "45 RES: "+NumToStr(SensorHTCompass(COMPASS_PORT));
+  SendResponseString(MAILBOX10, a);
+  Wait(1000);
+  turn(-30, SensorHTCompass(COMPASS_PORT));
+  a = "-30 RES: "+NumToStr(SensorHTCompass(COMPASS_PORT));
+  SendResponseString(MAILBOX10, a);
+  Wait(1000);
+  turn(140, SensorHTCompass(COMPASS_PORT));
+  a = "140 RES: "+NumToStr(SensorHTCompass(COMPASS_PORT));
+  SendResponseString(MAILBOX10, a);
+  Wait(1000);
+  turn(-120, SensorHTCompass(COMPASS_PORT));
+  a = "-120 RES: "+NumToStr(SensorHTCompass(COMPASS_PORT));
+  SendResponseString(MAILBOX10, a);
+  Wait(1000);
+  //forward_plus(-0.40, 40, SensorHTCompass(COMPASS_PORT));
 }
 
 
@@ -813,7 +875,7 @@ task main()
   ref_x_axis=ref_y_axis+90;
   ArrayInit(id, 0, 2);
 
-  Precedes(turnff);
+  Precedes(forwardff);
   //Precedes(exploreFreely, listen);
   //Precedes(new_search);
   //Precedes(touchff);
