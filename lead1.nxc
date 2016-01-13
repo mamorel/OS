@@ -25,9 +25,6 @@
 #define COLOR_BLUE           3
 //WHITE : >10
 
-#define SERV    0
-
-
 //#define 	Sin(_X)   asm { sin __FLTRETVAL__, _X }
 //#define 	Cos(_X)   asm { cos __FLTRETVAL__, _X }
 
@@ -44,12 +41,13 @@ byte msgOut[];
 byte id[];
 int seq_nb=0;
 
-mutex msgOutMutex;
+//mutex msgOutMutex;
 
 task exploreFreely();
 task search();
 task explore();
 
+/*
 void joy()
 {
   PlayTone(TONE_E4, MS_100);
@@ -66,7 +64,7 @@ void joy()
   Wait(MS_100);
   PlayTone(TONE_G5, SEC_1);
   Wait(SEC_1);
-}
+}*/
 
 
 char getMessage (byte &msg[]) {
@@ -174,6 +172,7 @@ int send_lead(byte dest){
   return 1;
 }
 
+
 int turn(short angle, short ref){
   int end =0;
   int obj=ref+angle;
@@ -190,15 +189,35 @@ int turn(short angle, short ref){
     Release(msgOutMutex);
   #endif
        */
-  while(compValue > obj){
-    OnFwd(OUT_A, 40);// turn left
-    OnRev(OUT_C,40);
-    compValue=SensorHTCompass(COMPASS_PORT);
-  }
-  while(compValue < obj){
-    OnFwd(OUT_C, 40); // turn right
-    OnRev(OUT_A,40);
-    compValue=SensorHTCompass(COMPASS_PORT);
+
+   string test = "CompValue: "+NumToStr(compValue)+" Obj: "+NumToStr(obj)+ " Obj+180: "+NumToStr(obj+180);
+   SendResponseString(MAILBOX10, test);
+  if(compValue > obj && compValue < (obj+180)){
+      test="1";
+      SendResponseString(MAILBOX10, test);
+      while(compValue > obj){
+      OnFwd(OUT_A, 40);// turn left
+      OnRev(OUT_C,40);
+      compValue=SensorHTCompass(COMPASS_PORT);
+    }
+    while(compValue < obj){
+      OnFwd(OUT_C, 40); // turn right
+      OnRev(OUT_A,40);
+      compValue=SensorHTCompass(COMPASS_PORT);
+    }
+  }else{
+  test="2";
+  SendResponseString(MAILBOX10, test);
+      while(compValue < obj){
+      OnFwd(OUT_C, 40); // turn right
+      OnRev(OUT_A,40);
+      compValue=SensorHTCompass(COMPASS_PORT);
+    }
+    while(compValue > obj){
+      OnFwd(OUT_A, 40);// turn left
+      OnRev(OUT_C,40);
+      compValue=SensorHTCompass(COMPASS_PORT);
+    }
   }
   Off(OUT_ABC);
   end=1;
@@ -213,9 +232,10 @@ int speed_to_pow(float speed) {
 }
 
 
-int forward_plus(float dist, int pow, int angle){
-  float time=dist/speed(pow);
+float forward_plus(float dist, int pow, int angle){
+  float time=dist/speed(pow)*1000;
   float alpha=(angle-ref_x_axis);
+  int colVal, usVal, touchVal;
 /*
   #ifdef SERV
     Acquire(msgOutMutex);
@@ -229,11 +249,29 @@ int forward_plus(float dist, int pow, int angle){
   string deb="alpha: "+NumToStr(alpha)+" "+"distx: "+NumToStr(dist_x)+" disty: "+NumToStr(dist_y);
   SendResponseString(MAILBOX10, deb);
 
-  TextOut(0, LCD_LINE2, "distx: "+NumToStr(dist_x));
-  TextOut(0, LCD_LINE3, "disty: "+NumToStr(dist_y));
-  OnFwdSync(BOTH_MOTORS, pow, 0);
-  Wait(time*1000);
-  return 1;
+  //TextOut(0, LCD_LINE2, "distx: "+NumToStr(dist_x));
+  //TextOut(0, LCD_LINE3, "disty: "+NumToStr(dist_y));
+
+  long tmp=0;
+  long t1;
+  while(tmp < time){
+     OnFwdSync(BOTH_MOTORS, pow, 0);
+     t1=CurrentTick();
+     if(w8_time != 0){   // we need to wait
+       Off(BOTH_MOTORS);
+       Wait(w8_time*1000);
+       t1=CurrentTick();
+     }
+     colVal=SensorHTColorNum(COLOR_PORT);
+     usVal=SensorHTCompass(COMPASS_PORT);
+     touchVal=Sensor(TOUCH_PORT);
+     if( (colVal >= 6 && colVal <= 9) || (usVal < 22) || (touchVal==1) ){    // Something in front of us -> exit and return the distance covered
+       return tmp*speed(pow);
+     }
+     Wait(200);
+     tmp=tmp+200+CurrentTick()- t1;
+  }
+  return dist;
 }
 
 int forward(float dist, int pow){
@@ -339,7 +377,7 @@ task catch()
   Off(OUT_ABC);
   OnRev(OUT_B, 60);
   Wait(150);
-  joy();
+  //joy();
 }
 
 struct mins{
@@ -369,7 +407,7 @@ mins get_min_dist(int re){
     PlayTone(TONE_G4, MS_100);
     Wait(MS_100);
     }*/
-    
+
     turn(1, ang_list[i]);
     Wait(10);
   }
@@ -446,7 +484,7 @@ task new_search(){
     TextOut(0, LCD_LINE2, "NOP");
     Wait(5000);
   }
-  */
+*/
 }
 
 
@@ -497,18 +535,18 @@ task search()
     }
     }
   }
-  ExitTo(exploreFreely);
   // Pas de balle detectee, task finie.
 }
 
 
 task listen()
 {
+/*
   if (BluetoothStatus(CONNECTION) != NO_ERR)
   StopAllTasks ();
   else
   TextOut(0, LCD_LINE1, "Conn Success!  ");
-
+  */
   // Wait for START message
   TextOut(0, LCD_LINE2,       "Waiting Msg...");
 
@@ -594,7 +632,7 @@ task listen()
        forward(dist*100, speed_to_pow(speed*1000)); // mm/s -> m/s
 
        if(next_rob != 0xFF){
-         send_action(next_rob, angle, dist, speed);
+         //send_action(next_rob, angle, dist, speed);
        }
      }
    }
@@ -602,7 +640,7 @@ task listen()
 
 }
 
-
+ /*
 task testUS(){
   SetSensorUltrasonic(S4);
   string lol;
@@ -613,11 +651,6 @@ task testUS(){
     TextOut(0, LCD_LINE3, lol);
     Wait(100);
   }
-}
-
-task turnff(){
-  turn(90, SensorHTCompass(COMPASS_PORT));
-  turn(90, SensorHTCompass(COMPASS_PORT));
 }
 
 task colorff(){
@@ -633,7 +666,7 @@ task colorff(){
     Wait(150);
   }
 }
-
+ */
 task exploreFreely(){
   ref_y_axis=SensorHTCompass(COMPASS_PORT);
   ref_x_axis=(ref_y_axis+90)%360;
@@ -646,6 +679,7 @@ task exploreFreely(){
      int colVal=0;
      int compVal=0;
      int touchVal=0;
+
 /*   string gfgf="";
      string deb="US: "+NumToStr(usVal)+"cV: "+NumToStr(compVal);
      string deb2="light: "+NumToStr(lightVal);
@@ -654,31 +688,28 @@ task exploreFreely(){
      TextOut(0, LCD_LINE3, deb);
      SendResponseString(MAILBOX10, deb);
      */
+
      turn(50, SensorHTCompass(COMPASS_PORT));                           // Premi�re balle !!!
      forward_plus(0.28, 30, SensorHTCompass(COMPASS_PORT));
-     ExitTo(search);
+     Precedes(search);
 
-     while(true){
-        compt+=1;
-        if(compt==8){
-           compt=0;
-           ExitTo(search);
+
+
+        turn(-SensorHTCompass(COMPASS_PORT)+ref_y_axis, SensorHTCompass(COMPASS_PORT));
+        float cpt=0;
+        while(cpt<2.8){
+          forward_plus(0.04, 30, SensorHTCompass(COMPASS_PORT));
+          usVal=SensorUS(US_PORT);
+          colVal=SensorHTColorNum(COLOR_PORT);
+          compVal=SensorHTCompass(COMPASS_PORT);
+          touchVal=Sensor(TOUCH_PORT);
+          /*checkCol(colVal, compVal);
+          checkUS(usVal, compVal);
+          checkTouch(touchVal, compVal);*/
+          cpt+=0.04;
         }
-        forward_plus(0.05, 30, SensorHTCompass(COMPASS_PORT));
-        usVal=SensorUS(US_PORT);
-        colVal=SensorHTColorNum(COLOR_PORT);
-        compVal=SensorHTCompass(COMPASS_PORT);
-        touchVal=Sensor(TOUCH_PORT);
 
-        /*deb="US: "+NumToStr(usVal)+"comp: "+NumToStr(compVal);
-        deb2="light: "+NumToStr(lightVal);
-        ClearScreen();
-        TextOut(0, LCD_LINE3, deb);
-        SendResponseString(MAILBOX10, deb);
-        TextOut(0, LCD_LINE5, deb2);
-        SendResponseString(MAILBOX10, deb2);
-        TextOut(0, LCD_LINE1, deb3);
-        */
+        // We should be on the top right corner now
 
         if(colVal >= 6 && colVal <= 9){
            if(compVal >= ref_y_axis - 30  && compVal <= ref_y_axis + 30){
@@ -709,22 +740,22 @@ task exploreFreely(){
            }
 
         }
-        if(touchVal == 1){}
-                   if(compVal >= ref_y_axis - 30  && compVal <= ref_y_axis + 30){
-              turn(-compVal+ref_x_axis+15, compVal);
-           }
-           if(compVal >= (180+ref_y_axis)%360 - 30  && compVal <= (180+ref_y_axis)%360 + 30){
-              turn(-compVal+180+ref_x_axis+15, compVal);
-           }
-           if(compVal >= (180+ref_x_axis)%360 - 30  && compVal <= (180+ref_x_axis)%360 + 30){
-              turn(-compVal+ref_y_axis+15, compVal);
-           }
-           if(compVal >= ref_x_axis - 30  && compVal <= ref_x_axis + 30){
-              turn(-compVal+180+ref_y_axis+15, compVal);
-           }
-     }
+        if(touchVal == 1){
+            if(compVal >= ref_y_axis - 30  && compVal <= ref_y_axis + 30){
+                 turn(-compVal+ref_x_axis+15, compVal);
+              }
+              if(compVal >= (180+ref_y_axis)%360 - 30  && compVal <= (180+ref_y_axis)%360 + 30){
+                 turn(-compVal+180+ref_x_axis+15, compVal);
+              }
+              if(compVal >= (180+ref_x_axis)%360 - 30  && compVal <= (180+ref_x_axis)%360 + 30){
+                 turn(-compVal+ref_y_axis+15, compVal);
+              }
+              if(compVal >= ref_x_axis - 30  && compVal <= ref_x_axis + 30){
+                 turn(-compVal+180+ref_y_axis+15, compVal);
+              }
+        }
 }
-
+      /*
 task home(){
   TextOut(0, LCD_LINE6, "Refy: "+NumToStr(SensorHTCompass(COMPASS_PORT)));
   ref_y_axis=SensorHTCompass(COMPASS_PORT);
@@ -761,8 +792,15 @@ task touchff(){
   Wait(1500);
   }
 }
-
+  */
 // TOUCH : 1 when pressed
+
+
+
+task turnff(){
+  turn(90, SensorHTCompass(COMPASS_PORT));
+  turn(90, SensorHTCompass(COMPASS_PORT));
+}
 
 
 task main()
@@ -776,6 +814,7 @@ task main()
   ArrayInit(id, 0, 2);
 
   Precedes(turnff);
+  //Precedes(exploreFreely, listen);
   //Precedes(new_search);
   //Precedes(touchff);
   //Precedes(testUS);
