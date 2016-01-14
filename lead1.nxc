@@ -23,6 +23,15 @@
 #define COLOR_GREEN          4
 #define COLOR_RED            9
 #define COLOR_BLUE           3
+
+#ifdef BIG
+#define COL_INF 6
+#define COL_SUP 9
+#else
+#define COL_INF 10
+#endif
+
+
 //WHITE : >10
 
 //#define 	Sin(_X)   asm { sin __FLTRETVAL__, _X }
@@ -47,837 +56,1166 @@ task exploreFreely();
 task search();
 task explore();
 
+struct double_int
+{
+    int int1;
+    int int2;
+};
+
 
 void joy()
 {
-  PlayTone(TONE_E4, MS_100);
-  Wait(MS_100);
-  PlayTone(TONE_G4, MS_100);
-  Wait(MS_100);
-  PlayTone(TONE_C5, MS_100);
-  Wait(MS_100);
-  PlayTone(TONE_E5, MS_100);
-  Wait(MS_100);
-  PlayTone(TONE_G5, MS_300);
-  Wait(MS_300);
-  PlayTone(TONE_E5, MS_100);
-  Wait(MS_100);
-  PlayTone(TONE_G5, SEC_1);
-  Wait(SEC_1);
-}
-
-
-char getMessage (byte &msg[]) {
-  until (BluetoothStatus(CONNECTION) == NO_ERR);  // Wait for connection
-  string __msg;
-  char r = ReceiveMessage(0,1,__msg);
-  if (r != 0)
-  return 0;
-
-  ArrayInit(msg,0,59);
-  StrToByteArray (__msg, msg);
-  r = ArrayLen(msg);
-  if (r < 5)
-  return 0;
-
-  return r;
+    PlayTone(TONE_E4, MS_100);
+    Wait(MS_100);
+    PlayTone(TONE_G4, MS_100);
+    Wait(MS_100);
+    PlayTone(TONE_C5, MS_100);
+    Wait(MS_100);
+    PlayTone(TONE_E5, MS_100);
+    Wait(MS_100);
+    PlayTone(TONE_G5, MS_300);
+    Wait(MS_300);
+    PlayTone(TONE_E5, MS_100);
+    Wait(MS_100);
+    PlayTone(TONE_G5, SEC_1);
+    Wait(SEC_1);
 }
 
 void sendMessage (byte msg[]) {
-  seq_nb+=1;
-  CommBTWriteType args2;
-  args2.Connection = CONNECTION;
-  args2.Buffer= ByteArrayToStr (msg);
+    seq_nb+=1;
+    CommBTWriteType args2;
+    args2.Connection = CONNECTION;
+    args2.Buffer= ByteArrayToStr (msg);
 
-  SysCommBTWrite(args2);
-  TextOut(0, LCD_LINE2,       "Trying to write");
-  while (BluetoothStatus (CONNECTION) == STAT_COMM_PENDING)
-  Wait (10);
+    SysCommBTWrite(args2);
+    TextOut(0, LCD_LINE2,       "Trying to write");
+    while (BluetoothStatus (CONNECTION) == STAT_COMM_PENDING)
+    Wait (10);
 
-  if (BluetoothStatus (CONNECTION) == NO_ERR)
-  TextOut(0, LCD_LINE2,   "Write Done     ");
-  else
-  TextOut(0, LCD_LINE2,   "Write Failed   ");
+    if (BluetoothStatus (CONNECTION) == NO_ERR)
+    TextOut(0, LCD_LINE2,   "Write Done     ");
+    else
+    TextOut(0, LCD_LINE2,   "Write Failed   ");
+}
+
+
+int send_action(byte dest, int angle, int dist, int speed){
+    string ang=FlattenVar(angle); // Int to string
+    dist=dist*100; // dist in cm not m.
+    string di=FlattenVar(dist);
+    speed=speed*1000; // speed in mm.s-1 not m.s-1
+    string spee=FlattenVar(speed);
+    string id=FlattenVar(seq_nb);
+
+    string ns="SEND_ACTION: ";
+    string deb0="id: "+NumToStr(seq_nb)+"id[0]: "+id[0]+" id[1]: "+id[1];
+    string deb1="angle: "+NumToStr(angle)+"ang[0]: "+ang[0]+" ang[1]: "+ang[1];
+    string deb2="speed: "+NumToStr(speed)+"spee[0]: "+spee[0]+" spee[1]: "+spee[1];
+    string deb3="dist: "+NumToStr(dist)+"di: "+di[0];
+    SendResponseString(MAILBOX10, ns);
+    SendResponseString(MAILBOX10, deb0);
+    SendResponseString(MAILBOX10, deb1);
+    SendResponseString(MAILBOX10, deb2);
+    SendResponseString(MAILBOX10, deb3);
+
+    ArrayInit(msgOut, 0, 10);
+    msgOut[0]=id[0];
+    msgOut[1]=id[1];
+    msgOut[2]=ACHILLE;
+    msgOut[3]=dest,
+    msgOut[4]=MSG_ACTION;
+    msgOut[5]=ang[0];
+    msgOut[6]=ang[1];
+    msgOut[7]=di;
+    msgOut[8]=spee[0];
+    msgOut[9]=spee[1];
+
+    sendMessage(msgOut);
+    return 1;
 }
 
 int send_wait(byte dest, float delay)
 {
-  string del=FlattenVar(delay);
-  string id=FlattenVar(seq_nb);
-  string deb0="id: "+NumToStr(seq_nb)+"id[0]: "+id[0]+" id[1]: "+id[1];
-  string deb="SEND_WAIT: delay: "+NumToStr(delay)+"length del: "+NumToStr(ArrayLen(del))+"del[0]: "+del[0]+"del[1]: "+del[1];
-  SendResponseString(MAILBOX10, deb);
-  SendResponseString(MAILBOX10, deb0);
-  ArrayInit(msgOut, 0, 6);
-  msgOut[0] = id[0];
-  msgOut[1] = id[1];
-  msgOut[2] = 0x08;
-  msgOut[3] = next_rob;                    //byte or int
-  msgOut[4] = MSG_WAIT;
-  msgOut[6] = del[0];
+    string del=FlattenVar(delay);
+    string id=FlattenVar(seq_nb);
+    string deb0="id: "+NumToStr(seq_nb)+"id[0]: "+id[0]+" id[1]: "+id[1];
+    string deb="SEND_WAIT: delay: "+NumToStr(delay)+"length del: "+NumToStr(ArrayLen(del))+"del[0]: "+del[0]+"del[1]: "+del[1];
+    SendResponseString(MAILBOX10, deb);
+    SendResponseString(MAILBOX10, deb0);
+    ArrayInit(msgOut, 0, 6);
+    msgOut[0] = id[0];
+    msgOut[1] = id[1];
+    msgOut[2] = 0x08;
+    msgOut[3] = next_rob;                    //byte or int
+    msgOut[4] = MSG_WAIT;
+    msgOut[6] = del[0];
 
-  sendMessage(msgOut);
-  return 1;
+    sendMessage(msgOut);
+    return 1;
 }
 
-int send_action(byte dest, int angle, int dist, int speed){
-  string ang=FlattenVar(angle); // Int to string
-  dist=dist*100; // dist in cm not m.
-  string di=FlattenVar(dist);
-  speed=speed*1000; // speed in mm.s-1 not m.s-1
-  string spee=FlattenVar(speed);
-  string id=FlattenVar(seq_nb);
-
-  string ns="SEND_ACTION: ";
-  string deb0="id: "+NumToStr(seq_nb)+"id[0]: "+id[0]+" id[1]: "+id[1];
-  string deb1="angle: "+NumToStr(angle)+"ang[0]: "+ang[0]+" ang[1]: "+ang[1];
-  string deb2="speed: "+NumToStr(speed)+"spee[0]: "+spee[0]+" spee[1]: "+spee[1];
-  string deb3="dist: "+NumToStr(dist)+"di: "+di[0];
-  SendResponseString(MAILBOX10, ns);
-  SendResponseString(MAILBOX10, deb0);
-  SendResponseString(MAILBOX10, deb1);
-  SendResponseString(MAILBOX10, deb2);
-  SendResponseString(MAILBOX10, deb3);
-
-  ArrayInit(msgOut, 0, 10);
-  msgOut[0]=id[0];
-  msgOut[1]=id[1];
-  msgOut[2]=ACHILLE;
-  msgOut[3]=dest,
-  msgOut[4]=MSG_ACTION;
-  msgOut[5]=ang[0];
-  msgOut[6]=ang[1];
-  msgOut[7]=di;
-  msgOut[8]=spee[0];
-  msgOut[9]=spee[1];
-
-  sendMessage(msgOut);
-  return 1;
-}
 
 int send_lead(byte dest){
-  string id=FlattenVar(seq_nb);
-  string deb="SEND_LEAD: dest= "+NumToStr(dest);
-  string deb0="id: "+NumToStr(seq_nb)+"id[0]: "+id[0]+" id[1]: "+id[1];
-  SendResponseString(MAILBOX10, deb);
-  SendResponseString(MAILBOX10, deb0);
-  ArrayInit(msgOut, 0, 5);
-  msgOut[0]=id[0];
-  msgOut[1]=id[1];
-  msgOut[2]=ACHILLE;
-  msgOut[3]=dest;
-  msgOut[4]=MSG_LEAD;
+    string id=FlattenVar(seq_nb);
+    string deb="SEND_LEAD: dest= "+NumToStr(dest);
+    string deb0="id: "+NumToStr(seq_nb)+"id[0]: "+id[0]+" id[1]: "+id[1];
+    SendResponseString(MAILBOX10, deb);
+    SendResponseString(MAILBOX10, deb0);
+    ArrayInit(msgOut, 0, 5);
+    msgOut[0]=id[0];
+    msgOut[1]=id[1];
+    msgOut[2]=ACHILLE;
+    msgOut[3]=dest;
+    msgOut[4]=MSG_LEAD;
 
-  sendMessage(msgOut);
-  return 1;
+    sendMessage(msgOut);
+    return 1;
 }
 
 
-int turn(int angle, int ref){
-  int end =0;
-  int obj=ref+angle;
-  while(obj<0){
-    obj+=360;
-  }
-  obj=obj%360;
+char getMessage (byte &msg[]) {
+    until (BluetoothStatus(CONNECTION) == NO_ERR);  // Wait for connection
+    string __msg;
+    char r = ReceiveMessage(0,1,__msg);
+    if (r != 0)
+    return 0;
 
-  int compValue=SensorHTCompass(COMPASS_PORT);
-  int initValue=compValue;
+    ArrayInit(msg,0,59);
+    StrToByteArray (__msg, msg);
+    r = ArrayLen(msg);
+    if (r < 5)
+    return 0;
+
+    return r;
+}
+
+int turn(int angle, int ref){
+    int end =0;
+    int obj=ref+angle;
+    while(obj<0){
+        obj+=360;
+    }
+    obj=obj%360;
+
+    int compValue=SensorHTCompass(COMPASS_PORT);
+    int initValue=compValue;
     /*
-  #ifdef SERV
+    #ifdef SERV
     Acquire(msgOutMutex);                         // delay in sec !!??? Need to send a wait msg?
     send_wait(next_rob, abs(compValue-obj)/90);   // Approx
     Release(msgOutMutex);
-  #endif
-       */
+    #endif
+    */
 
-   string test = "CompValue: "+NumToStr(compValue)+" Obj: "+NumToStr(obj)+ " Obj+180: "+NumToStr(obj+180);
-   SendResponseString(MAILBOX10, test);
-  if(compValue > obj && compValue < (obj+180)){
-      test="1";
-      SendResponseString(MAILBOX10, test);
-      while(compValue > obj){
-      OnFwd(OUT_A, 40);// turn left
-      OnRev(OUT_C,40);
-      compValue=SensorHTCompass(COMPASS_PORT);
+    string test = "CompValue: "+NumToStr(compValue)+" Obj: "+NumToStr(obj)+ " Obj+180: "+NumToStr(obj+180);
+    SendResponseString(MAILBOX10, test);
+    if(compValue > obj && compValue < (obj+180)){
+        test="1";
+        SendResponseString(MAILBOX10, test);
+        while(compValue > obj){
+            OnFwd(OUT_A, 40);// turn left
+            OnRev(OUT_C,40);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        while(compValue < obj){
+            OnFwd(OUT_C, 40); // turn right
+            OnRev(OUT_A,40);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
     }
-    while(compValue < obj){
-      OnFwd(OUT_C, 40); // turn right
-      OnRev(OUT_A,40);
-      compValue=SensorHTCompass(COMPASS_PORT);
+    else if(initValue+angle > 360){
+        while(compValue > 2){
+            OnFwd(OUT_C, 40);
+            OnRev(OUT_A, 40);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        while(compValue > obj){
+            OnFwd(OUT_A, 40);// turn left
+            OnRev(OUT_C,40);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        while(compValue < obj){
+            OnFwd(OUT_C, 40); // turn right
+            OnRev(OUT_A,40);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
     }
-  }
-  else if(initValue+angle > 360){
-   while(compValue > 2){
-    OnFwd(OUT_C, 40);
-    OnRev(OUT_A, 40);
-    compValue=SensorHTCompass(COMPASS_PORT);
-   }
-         while(compValue > obj){
-      OnFwd(OUT_A, 40);// turn left
-      OnRev(OUT_C,40);
-      compValue=SensorHTCompass(COMPASS_PORT);
+    else if(initValue+angle < 0){
+        while(compValue < 358){
+            OnFwd(OUT_A, 40);// turn left
+            OnRev(OUT_C,40);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        while(compValue > obj){
+            OnFwd(OUT_A, 40);// turn left
+            OnRev(OUT_C,40);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        while(compValue < obj){
+            OnFwd(OUT_C, 40); // turn right
+            OnRev(OUT_A,40);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
     }
-    while(compValue < obj){
-      OnFwd(OUT_C, 40); // turn right
-      OnRev(OUT_A,40);
-      compValue=SensorHTCompass(COMPASS_PORT);
+    else{
+        test="2";
+        SendResponseString(MAILBOX10, test);
+        while(compValue < obj){
+            OnFwd(OUT_C, 40); // turn right
+            OnRev(OUT_A,40);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        while(compValue > obj){
+            OnFwd(OUT_A, 40);// turn left
+            OnRev(OUT_C,40);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
     }
-  }
-  else if(initValue+angle < 0){
-    while(compValue < 358){
-           OnFwd(OUT_A, 40);// turn left
-      OnRev(OUT_C,40);
-      compValue=SensorHTCompass(COMPASS_PORT);
-    }
-             while(compValue > obj){
-      OnFwd(OUT_A, 40);// turn left
-      OnRev(OUT_C,40);
-      compValue=SensorHTCompass(COMPASS_PORT);
-    }
-    while(compValue < obj){
-      OnFwd(OUT_C, 40); // turn right
-      OnRev(OUT_A,40);
-      compValue=SensorHTCompass(COMPASS_PORT);
-    }
-  }
-  else{
-  test="2";
-  SendResponseString(MAILBOX10, test);
-      while(compValue < obj){
-      OnFwd(OUT_C, 40); // turn right
-      OnRev(OUT_A,40);
-      compValue=SensorHTCompass(COMPASS_PORT);
-    }
-    while(compValue > obj){
-      OnFwd(OUT_A, 40);// turn left
-      OnRev(OUT_C,40);
-      compValue=SensorHTCompass(COMPASS_PORT);
-    }
-  }
-  Off(OUT_ABC);
-  end=1;
+    Off(OUT_ABC);
+    end=1;
 }
 
 float speed(int pow){
-  return 0.0039*pow-0.0293;
+    return 0.0039*pow-0.0293;
 }
 
 int speed_to_pow(float speed) {
-  return (speed+0.0293)/0.0039;
+    return (speed+0.0293)/0.0039;
 }
 
 
 float forward_plus(float dist, int pow, int angle){
-  float time=abs(dist)/speed(pow)*1000;
-  float alpha=(angle-ref_x_axis);
-  int colVal, usVal, touchVal;
-/*
-  #ifdef SERV
+    float time=abs(dist)/speed(pow)*1000;
+    float alpha=(angle-ref_x_axis);
+    int colVal, usVal, touchVal;
+    /*
+    #ifdef SERV
     Acquire(msgOutMutex);
     send_action(next_rob, angle-ref_y_axis, dist, speed(pow)); // angle=curr_angle-angle_init
     Release(msgOutMutex);
-  #endif
-*/
+    #endif
+    */
 
-  dist_x=dist_x+dist*Cos(alpha)/100;
-  dist_y=dist_y+dist*Sin(alpha)/100;
+    dist_x=dist_x+dist*Cos(alpha)/100;
+    dist_y=dist_y+dist*Sin(alpha)/100;
 
-  string deb="alpha: "+NumToStr(alpha)+" "+"distx: "+NumToStr(dist_x)+" disty: "+NumToStr(dist_y);
-  SendResponseString(MAILBOX10, deb);
+    string deb="alpha: "+NumToStr(alpha)+" "+"distx: "+NumToStr(dist_x)+" disty: "+NumToStr(dist_y);
+    SendResponseString(MAILBOX10, deb);
 
-  TextOut(0, LCD_LINE2, "distx: "+NumToStr(dist_x));
-  TextOut(0, LCD_LINE3, "disty: "+NumToStr(dist_y));
+    TextOut(0, LCD_LINE2, "distx: "+NumToStr(dist_x));
+    TextOut(0, LCD_LINE3, "disty: "+NumToStr(dist_y));
 
-  float tmp=0;
-  long t1;
-  while(tmp < time){
-     if(dist>0){
-     OnFwdSync(BOTH_MOTORS, pow, 0);
-     }else{
-     OnRevSync(BOTH_MOTORS, pow, 0);
-     }
-     t1=CurrentTick();
-     if(w8_time != 0){   // we need to wait
-       Off(BOTH_MOTORS);
-       Wait(w8_time*1000);
-       t1=CurrentTick();
-     }
-     colVal=SensorHTColorNum(COLOR_PORT);
-     usVal=SensorHTCompass(COMPASS_PORT);
-     touchVal=Sensor(TOUCH_PORT);
-     if( (colVal >= 6 && colVal <= 9) || (usVal < 22) || (touchVal==1) ){    // Something in front of us -> exit and return the distance covered
-       TextOut(0, LCD_LINE3, "ABORT FWD_PLUS");
-       if(dist>0){
-       return tmp*speed(pow);
-       }else{
-       return -tmp*speed(pow);
-       }
-     }
-     Wait(200);
-     tmp=tmp+200+CurrentTick()- t1;
-  }
-  return dist;
+    float tmp=0;
+    long t1;
+    while(tmp < time){
+        if(dist>0){
+            OnFwdSync(BOTH_MOTORS, pow, 0);
+        }else{
+            OnRevSync(BOTH_MOTORS, pow, 0);
+        }
+        t1=CurrentTick();
+        if(w8_time != 0){   // we need to wait
+            Off(BOTH_MOTORS);
+            Wait(w8_time*1000);
+            t1=CurrentTick();
+        }
+        colVal=SensorHTColorNum(COLOR_PORT);
+        usVal=SensorHTCompass(COMPASS_PORT);
+        touchVal=Sensor(TOUCH_PORT);
+        if( (colVal >= 6 && colVal <= 9) || (usVal < 22) || (touchVal==1) ){    // Something in front of us -> exit and return the distance covered
+            TextOut(0, LCD_LINE3, "ABORT FWD_PLUS");
+            if(dist>0){
+                return tmp*speed(pow);
+            }else{
+                return -tmp*speed(pow);
+            }
+        }
+        Wait(200);
+        tmp=tmp+200+CurrentTick()- t1;
+    }
+    return dist;
 }
 
 int forward(float dist, int pow){
-  float time=dist/speed(pow);
-  int i=0;
-  for(i=0;i<50;i++){
-     OnFwdSync(BOTH_MOTORS, pow, 0);
-     Wait(time*1000/50);
-     if(w8_time!=0){
-        Off(BOTH_MOTORS);
-        Wait(w8_time);
-        w8_time=0;
-     }
-  }
-  return 1;
+    float time=dist/speed(pow);
+    int i=0;
+    for(i=0;i<50;i++){
+        OnFwdSync(BOTH_MOTORS, pow, 0);
+        Wait(time*1000/50);
+        if(w8_time!=0){
+            Off(BOTH_MOTORS);
+            Wait(w8_time);
+            w8_time=0;
+        }
+    }
+    return 1;
 }
 
 int distance()
 {
-  SetSensorUltrasonic(S4);
-  int list[];
-  ArrayInit(list, 0, 5);
-  int cpt = 0;
-  int ok = 0;
-  while(list[4]==0)
-  {
-    list[cpt]=SensorUS(S4);
-    if(list[cpt]<=12) ok++;
-    Wait(200);
-    cpt++;
-  }
-  if(ok>=3) return 1;
-  else return 0;
+    SetSensorUltrasonic(S4);
+    int list[];
+    ArrayInit(list, 0, 5);
+    int cpt = 0;
+    int ok = 0;
+    while(list[4]==0)
+    {
+        list[cpt]=SensorUS(S4);
+        if(list[cpt]<=12) ok++;
+        Wait(200);
+        cpt++;
+    }
+    if(ok>=3) return 1;
+    else return 0;
 
 }
 
 
 task catch()
 {
-  Off(OUT_ABC);
-  int dist=0;
-  int colVal=0;
-  int touchVal=0;
+    Off(OUT_ABC);
+    int dist=0;
+    int colVal=0;
+    int touchVal=0;
 
-  while(true)
-  {
-    colVal=Sensor(COLOR_PORT);                // Mur -> exit to exploreFreely
+    while(true)
+    {
+        colVal=Sensor(COLOR_PORT);                // Mur -> exit to exploreFreely
         if(colVal >= 6 && colVal <= 9){
-           ExitTo(exploreFreely);
+            ExitTo(exploreFreely);
         }
         if(touchVal ==1){
-          ExitTo(exploreFreely);
+            ExitTo(exploreFreely);
         }
 
-    dist = SensorUS(S4);
+        dist = SensorUS(S4);
 
-    ClearScreen();
-    TextOut(0,LCD_LINE3, "Dist: ");
-    NumOut(28,LCD_LINE3,dist);
-    while(dist>12)
-    {
-      forward_plus(0.02,40, SensorHTCompass(COMPASS_PORT));
-      dist= SensorUS(S4);
-      colVal=Sensor(COLOR_PORT);                // Mur -> exit to exploreFreely
-      if(colVal >= 6 && colVal <= 9){
-         ExitTo(exploreFreely);
-      }
-      if(touchVal == 1){
-        ExitTo(exploreFreely);
-      }
+        ClearScreen();
+        TextOut(0,LCD_LINE3, "Dist: ");
+        NumOut(28,LCD_LINE3,dist);
+        while(dist>12)
+        {
+            forward_plus(0.02,40, SensorHTCompass(COMPASS_PORT));
+            dist= SensorUS(S4);
+            colVal=Sensor(COLOR_PORT);                // Mur -> exit to exploreFreely
+            if(colVal >= 6 && colVal <= 9){
+                ExitTo(exploreFreely);
+            }
+            if(touchVal == 1){
+                ExitTo(exploreFreely);
+            }
+        }
+
+        OnFwd(OUT_B, 35);
+        Wait(450);
+        Off(OUT_B);
+        forward_plus(0.03,22, SensorHTCompass(COMPASS_PORT));
+
+        if(distance()==1){
+            Off(OUT_ABC);
+            break;
+        }
+        else{
+            OnRev(OUT_B, 20);
+            Wait(150);
+        }
     }
 
-    OnFwd(OUT_B, 35);
-    Wait(450);
-    Off(OUT_B);
-    forward_plus(0.03,22, SensorHTCompass(COMPASS_PORT));
-
-    if(distance()==1){
-      Off(OUT_ABC);
-      break;
+    // Return init position
+    if(dist_y > 0){
+        turn(-SensorHTCompass(COMPASS_PORT)+ref_y_axis, SensorHTCompass(COMPASS_PORT));
+    }else{
+        dist_y=-dist_y;
+        turn(-SensorHTCompass(COMPASS_PORT)+ref_y_axis+180, SensorHTCompass(COMPASS_PORT));
     }
-    else{
-      OnRev(OUT_B, 20);
-      Wait(150);
+    forward(dist_y, 40);
+    if(dist_x>0){
+        turn(-SensorHTCompass(COMPASS_PORT)+ref_x_axis+180, SensorHTCompass(COMPASS_PORT));
+    }else{
+        dist_x=-dist_x;
+        turn(-SensorHTCompass(COMPASS_PORT)+ref_x_axis, SensorHTCompass(COMPASS_PORT));
     }
-  }
-
-// Return init position
-  if(dist_y > 0){
-    turn(-SensorHTCompass(COMPASS_PORT)+ref_y_axis, SensorHTCompass(COMPASS_PORT));
-  }else{
-    dist_y=-dist_y;
-    turn(-SensorHTCompass(COMPASS_PORT)+ref_y_axis+180, SensorHTCompass(COMPASS_PORT));
-  }
-  forward(dist_y, 40);
-  if(dist_x>0){
-    turn(-SensorHTCompass(COMPASS_PORT)+ref_x_axis+180, SensorHTCompass(COMPASS_PORT));
-  }else{
-    dist_x=-dist_x;
-    turn(-SensorHTCompass(COMPASS_PORT)+ref_x_axis, SensorHTCompass(COMPASS_PORT));
-  }
-  forward(dist_x, 40);
-  Off(OUT_ABC);
-  OnRev(OUT_B, 60);
-  Wait(150);
-  //joy();
+    forward(dist_x, 40);
+    Off(OUT_ABC);
+    OnRev(OUT_B, 60);
+    Wait(150);
+    //joy();
 }
 
 struct mins{
-  int angle;
-  int dist;
+    int angle;
+    int dist;
 };
 
+
+int get_min_angle(){
+    int origin = SensorHTCompass(COMPASS_PORT); // initial position
+    turn(-30, origin);
+
+    int i=0;
+    int dist_list[];
+    int ang_list[];
+    ArrayInit(dist_list, 0, 60);
+    ArrayInit(ang_list, 0, 60);
+    for(i; i<60; i++){
+        dist_list[i]=SensorUS(US_PORT);
+        ang_list[i]=SensorHTCompass(COMPASS_PORT);
+        turn(1, ang_list[i]);
+        Wait(5);
+    }
+
+    int min_index=0;
+    i=0;
+    for(i; i<60; i++){
+        if(dist_list[i] < dist_list[min_index]){
+            if((abs(dist_list[i]-dist_list[i-1]) < 5) || (abs(dist_list[i]-dist_list[i+1]) < 5)){
+                min_index=i;
+            }
+        }
+    }
+
+    turn(-30, SensorHTCompass(COMPASS_PORT)); // Go back to init pos
+    return ang_list[min_index];
+}
+
 mins get_min_dist(int re){
-  int origin = SensorHTCompass(COMPASS_PORT); // initial position
-  turn(-30, origin);
+    int origin = SensorHTCompass(COMPASS_PORT); // initial position
+    turn(-30, origin);
 
-  int i=0;
-  int dist_list[];
-  int ang_list[];
-  ArrayInit(dist_list, 0, 60);
-  string d;
-  ArrayInit(ang_list, 0, 60);
-  for(i; i<60; i++){
-    dist_list[i]=SensorUS(US_PORT);
-    d=NumToStr(i)+" : "+NumToStr(dist_list[i]);
-    SendResponseString(MAILBOX10, d);
-    ang_list[i]=SensorHTCompass(COMPASS_PORT);
+    int i=0;
+    int dist_list[];
+    int ang_list[];
+    ArrayInit(dist_list, 0, 60);
+    string d;
+    ArrayInit(ang_list, 0, 60);
+    for(i; i<60; i++){
+        dist_list[i]=SensorUS(US_PORT);
+        d=NumToStr(i)+" : "+NumToStr(dist_list[i]);
+        SendResponseString(MAILBOX10, d);
+        ang_list[i]=SensorHTCompass(COMPASS_PORT);
 
-    /*if(dist_list[i] < 30){
-    PlayTone(TONE_E4, MS_100);
-    Wait(MS_100);
-    PlayTone(TONE_G4, MS_100);
-    Wait(MS_100);
+        /*if(dist_list[i] < 30){
+        PlayTone(TONE_E4, MS_100);
+        Wait(MS_100);
+        PlayTone(TONE_G4, MS_100);
+        Wait(MS_100);
     }*/
 
     turn(1, ang_list[i]);
     Wait(10);
-  }
+}
 
-  int min_index;
-  if(re==0){
+int min_index;
+if(re==0){
     min_index=0;
     i=0;
     for(i; i<60; i++){
-      if(dist_list[i] < dist_list[min_index]){
-        if((abs(dist_list[i]-dist_list[i-1]) < 5) || (abs(dist_list[i]-dist_list[i+1]) < 5)){
-          min_index=i;
+        if(dist_list[i] < dist_list[min_index]){
+            if((abs(dist_list[i]-dist_list[i-1]) < 5) || (abs(dist_list[i]-dist_list[i+1]) < 5)){
+                min_index=i;
+            }
         }
-      }
     }
-  }
-  if(re==1){
+}
+if(re==1){
     int max_ind=0;
     int min_ind=0;
     int j=0;
     for(j;j<5;j++){
-      if(dist_list[j] > dist_list[max_ind] && dist_list[j] < 250){
-        max_ind=j;
-      }
+        if(dist_list[j] > dist_list[max_ind] && dist_list[j] < 250){
+            max_ind=j;
+        }
     }
     for(j=0;j<5;j++){
-      if(dist_list[j] < dist_list[min_ind]){
-        min_ind=j;
-      }
+        if(dist_list[j] < dist_list[min_ind]){
+            min_ind=j;
+        }
     }
     if(dist_list[max_ind]-dist_list[min_ind] < 30){
-      min_index=0;
+        min_index=0;
     }
-  }
-  turn(-SensorHTCompass(COMPASS_PORT)+ang_list[min_index+2], SensorHTCompass(COMPASS_PORT)); //Go in the computed drectionn
-  mins res;
-  res.angle=ang_list[min_index];
-  res.dist=dist_list[min_index];
-  return res;
+}
+turn(-SensorHTCompass(COMPASS_PORT)+ang_list[min_index+2], SensorHTCompass(COMPASS_PORT)); //Go in the computed drectionn
+mins res;
+res.angle=ang_list[min_index];
+res.dist=dist_list[min_index];
+return res;
+}
+
+
+
+int new_search_func(){
+    OnRev(OUT_B, 25);
+    Wait(200);
+
+
+    int angle_min = get_min_angle(); // scan and get the angle with the nearest object
+    turn(-SensorHTCompass(COMPASS_PORT)+angle_min, SensorHTCompass(COMPASS_PORT)); // Turn to go on the direction computed just before
+    int dist_min = SensorUS(US_PORT); // The ball should be in front of us, dist_min cm away
+    forward_plus(dist_min/200, 30, SensorHTCompass(COMPASS_PORT)); // we should be closer to the ball now
+
+    // scan again
+    int new_angle_min = get_min_angle();
+
+    int diff = abs(angle_min-new_angle_min);
+    turn(-SensorHTCompass(COMPASS_PORT)+new_angle_min, SensorHTCompass(COMPASS_PORT));
+
+    if(diff < 3){ // something in this direction!
+        return 1;
+    }else{
+        return 0;
+    }
 }
 
 task new_search(){
-  OnRev(OUT_B, 25);
-  Wait(200);
+    OnRev(OUT_B, 25);
+    Wait(200);
 
-  mins res = get_min_dist(0); // scan and get the angle with the nearest object
-  //turn(-SensorHTCompass(COMPASS_PORT)+angle_min, SensorHTCompass(COMPASS_PORT)); // Turn to go on the direction computed just before
-  //int dist_min = SensorUS(US_PORT); // The ball should be in front of us, dist_min cm away
-  TextOut(0, LCD_LINE5, NumToStr(res.dist));
-  string so = "dist_min: "+NumToStr(res.dist);
-  SendResponseString(MAILBOX10, so);
+    mins res = get_min_dist(0); // scan and get the angle with the nearest object
+    //turn(-SensorHTCompass(COMPASS_PORT)+angle_min, SensorHTCompass(COMPASS_PORT)); // Turn to go on the direction computed just before
+    //int dist_min = SensorUS(US_PORT); // The ball should be in front of us, dist_min cm away
+    TextOut(0, LCD_LINE5, NumToStr(res.dist));
+    string so = "dist_min: "+NumToStr(res.dist);
+    SendResponseString(MAILBOX10, so);
 
-  forward_plus(res.dist/100, 30, SensorHTCompass(COMPASS_PORT)); // we should be closer to the ball now
+    forward_plus(res.dist/100, 30, SensorHTCompass(COMPASS_PORT)); // we should be closer to the ball now
 
-  /*
-  // scan again
-  mins new_mins = get_min_dist(1);
+    /*
+    // scan again
+    mins new_mins = get_min_dist(1);
 
-  int diff = abs(res.angle-new_mins.angle);
-  string da = "Diff: "+NumToStr(diff);
-  SendResponseString(MAILBOX10, da);
-  //turn(-SensorHTCompass(COMPASS_PORT)+new_angle_min, SensorHTCompass(COMPASS_PORT));
+    int diff = abs(res.angle-new_mins.angle);
+    string da = "Diff: "+NumToStr(diff);
+    SendResponseString(MAILBOX10, da);
+    //turn(-SensorHTCompass(COMPASS_PORT)+new_angle_min, SensorHTCompass(COMPASS_PORT));
 
 
-  if(diff < 5){ // something in this direction!
+    if(diff < 5){ // something in this direction!
     TextOut(0, LCD_LINE2, "Trouve");
     //ExitTo(catch);
-  }
-  if(SensorUS(US_PORT) < 23){
-    TextOut(0, LCD_LINE3, "Coucou");
-    Wait(5000);
-  }else{
-    //ExitTo(exploreFreely);
-    TextOut(0, LCD_LINE2, "NOP");
-    Wait(5000);
-  }
+}
+if(SensorUS(US_PORT) < 23){
+TextOut(0, LCD_LINE3, "Coucou");
+Wait(5000);
+}else{
+//ExitTo(exploreFreely);
+TextOut(0, LCD_LINE2, "NOP");
+Wait(5000);
+}
 */
 }
 
 
 task search()
 {
-  byte msg[];
-  //msg= send_wait()
+    byte msg[];
+    //msg= send_wait()
 
-  OnRev(OUT_B,25);
-  Wait(200);
-  float list[];
-  float test[];
-  int i=0;
-  int j=0;
-  int lll=0;
-  int init=SensorHTCompass(COMPASS_PORT);
-  turn(-30, init);
-  string deb;
+    OnRev(OUT_B,25);
+    Wait(200);
+    float list[];
+    float test[];
+    int i=0;
+    int j=0;
+    int lll=0;
+    int init=SensorHTCompass(COMPASS_PORT);
+    turn(-30, init);
+    string deb;
 
-  ArrayInit(test,0 ,6);
-  ArrayInit(list, 0, 60);
-  for(i;i<60;i++)
-  {
-    list[i]=SensorUS(S4);
-    deb="Value: "+NumToStr(list[i]);
-    ClearScreen();
-    TextOut(0, LCD_LINE3, deb);
-    turn(1, SensorHTCompass(COMPASS_PORT));
-    Wait(5);
-    if(i!=0){
-    if(list[i-1]!=0){
-      ClearScreen();
-      TextOut(0, LCD_LINE3, "%: "+NumToStr((list[i-1]-list[i])/list[i-1]));
-      float quo=abs(((list[i]-list[i-1])/list[i-1]));
-      string s = NumToStr(quo);
-      SendResponseString(MAILBOX10, s);
-      if(abs((list[i]-list[i-1])/list[i-1])>0.4){
-        //turn(-3, SensorHTCompass(COMPASS_PORT));
+    ArrayInit(test,0 ,6);
+    ArrayInit(list, 0, 60);
+    for(i;i<60;i++)
+    {
+        list[i]=SensorUS(S4);
+        deb="Value: "+NumToStr(list[i]);
+        ClearScreen();
+        TextOut(0, LCD_LINE3, deb);
+        turn(1, SensorHTCompass(COMPASS_PORT));
+        Wait(5);
+        if(i!=0){
+            if(list[i-1]!=0){
+                ClearScreen();
+                TextOut(0, LCD_LINE3, "%: "+NumToStr((list[i-1]-list[i])/list[i-1]));
+                float quo=abs(((list[i]-list[i-1])/list[i-1]));
+                string s = NumToStr(quo);
+                SendResponseString(MAILBOX10, s);
+                if(abs((list[i]-list[i-1])/list[i-1])>0.4){
+                    //turn(-3, SensorHTCompass(COMPASS_PORT));
 
-        dist_search=list[i];
-        Off(OUT_B);
-        if(i>4){
-        //joy();
-        turn(10, SensorHTCompass(COMPASS_PORT));
-        ExitTo(catch);  // Surement une balle, on lance catch.
+                    dist_search=list[i];
+                    Off(OUT_B);
+                    if(i>4){
+                        //joy();
+                        turn(10, SensorHTCompass(COMPASS_PORT));
+                        ExitTo(catch);  // Surement une balle, on lance catch.
+                    }
+                }
+            }
         }
-      }
     }
-    }
-  }
-  // Pas de balle detectee, task finie.
+    // Pas de balle detectee, task finie.
 }
 
 
 task listen()
 {
-/*
-  if (BluetoothStatus(CONNECTION) != NO_ERR)
-  StopAllTasks ();
-  else
-  TextOut(0, LCD_LINE1, "Conn Success!  ");
-  */
-  // Wait for START message
-  TextOut(0, LCD_LINE2,       "Waiting Msg...");
+    /*
+    if (BluetoothStatus(CONNECTION) != NO_ERR)
+    StopAllTasks ();
+    else
+    TextOut(0, LCD_LINE1, "Conn Success!  ");
+    */
+    // Wait for START message
+    TextOut(0, LCD_LINE2,       "Waiting Msg...");
 
-  while(true){
-    until (getMessage (msg))
-    if(msg[4]==MSG_START && msg[3]==ACHILLE){
-      break;
+    while(true){
+        until (getMessage (msg))
+        if(msg[4]==MSG_START && msg[3]==ACHILLE){
+            break;
+        }
     }
-  }
 
-  string debs;
-  TextOut(0, LCD_LINE2,   "START !!!     ");
-  byte rank = msg[5];
-  byte length = msg[6];
-  byte previous = msg[7];
-  next_rob = msg[8];
+    string debs;
+    TextOut(0, LCD_LINE2,   "START !!!     ");
+    byte rank = msg[5];
+    byte length = msg[6];
+    byte previous = msg[7];
+    next_rob = msg[8];
 
-  int angle;
-  int dist;
-  int speed;
+    int angle;
+    int dist;
+    int speed;
 
-  Wait (50);
+    Wait (50);
 
-  if (rank==0) // Leader -> exploration de l'arene
-  {
-    StartTask(exploreFreely);
-  }
+    if (rank==0) // Leader -> exploration de l'arene
+    {
+        StartTask(exploreFreely);
+    }
 
     if(next_rob != 0xFF){
-      // we are not the last robot
-      debs="We are not the last robot";
-      SendResponseString(MAILBOX10, debs);
+        // we are not the last robot
+        debs="We are not the last robot";
+        SendResponseString(MAILBOX10, debs);
     }
 
-  while(true){
-    while(!getMessage(msg)){}
-    debs="Message !";
-    SendResponseString(MAILBOX10, debs);
+    while(true){
+        while(!getMessage(msg)){}
+        debs="Message !";
+        SendResponseString(MAILBOX10, debs);
 
-    if(msg[3]==ACHILLE) {
-    debs="Pour Achille: ";
-    SendResponseString(MAILBOX10, debs);
+        if(msg[3]==ACHILLE) {
+            debs="Pour Achille: ";
+            SendResponseString(MAILBOX10, debs);
 
-    if(msg[4]==MSG_STOP){   // STOP MSG received
-      debs="MSG_STOP";
-      SendResponseString(MAILBOX10, debs);
-      StopAllTasks();
+            if(msg[4]==MSG_STOP){   // STOP MSG received
+                debs="MSG_STOP";
+                SendResponseString(MAILBOX10, debs);
+                StopAllTasks();
+            }
+
+            if(msg[4]==MSG_WAIT){   // STOP MSG received
+                w8_time=msg[5];
+                debs="MSG_WAIT: "+NumToStr(w8_time)+" sec";
+                SendResponseString(MAILBOX10, debs);
+            }
+
+            if(msg[4]== MSG_KICK){    // KICK MSG received
+                if(msg[5]==0 && msg[7]==ACHILLE){
+                    // Stop follower and Start explore we are the leader now.
+                    // Can we stop tasks that are not launched?
+                    //Stop(exploreFreely); Stop(new_search); Stop(catch);
+                }
+                if(msg[5]==rank+1){
+                    // New follower -> get its id.
+                    next_rob=msg[7];
+                }
+                if(msg[5]==rank){
+                    // We are kicked
+                    StopAllTasks();
+                }
+            }
+
+            if(msg[4]==MSG_LEAD){    // We are the leader now.
+                // Stop follower
+                // Start explore
+            }
+
+            if(msg[4]==0x00 && rank !=0)    // Send the message to our follower
+            {
+                angle= 256*msg[6]+msg[5];
+                dist=msg[7];  //in cm
+                speed= msg[8] +256*msg[9]; //in mm/s
+                turn(angle, ref_y_axis);
+                forward(dist*100, speed_to_pow(speed*1000)); // mm/s -> m/s
+
+                if(next_rob != 0xFF){
+                    //send_action(next_rob, angle, dist, speed);
+                }
+            }
+        }
     }
-
-    if(msg[4]==MSG_WAIT){   // STOP MSG received
-      w8_time=msg[5];
-      debs="MSG_WAIT: "+NumToStr(w8_time)+" sec";
-      SendResponseString(MAILBOX10, debs);
-    }
-
-    if(msg[4]== MSG_KICK){    // KICK MSG received
-      if(msg[5]==0 && msg[7]==ACHILLE){
-        // Stop follower and Start explore we are the leader now.
-        // Can we stop tasks that are not launched?
-        //Stop(exploreFreely); Stop(new_search); Stop(catch);
-      }
-      if(msg[5]==rank+1){
-        // New follower -> get its id.
-        next_rob=msg[7];
-      }
-      if(msg[5]==rank){
-        // We are kicked
-        StopAllTasks();
-      }
-    }
-
-    if(msg[4]==MSG_LEAD){    // We are the leader now.
-      // Stop follower
-      // Start explore
-    }
-
-      if(msg[4]==0x00 && rank !=0)    // Send the message to our follower
-     {
-       angle= 256*msg[6]+msg[5];
-       dist=msg[7];  //in cm
-       speed= msg[8] +256*msg[9]; //in mm/s
-       turn(angle, ref_y_axis);
-       forward(dist*100, speed_to_pow(speed*1000)); // mm/s -> m/s
-
-       if(next_rob != 0xFF){
-         //send_action(next_rob, angle, dist, speed);
-       }
-     }
-   }
-  }
 
 }
 
- /*
+/*
 task testUS(){
-  SetSensorUltrasonic(S4);
-  string lol;
-  while(true){
-    lol= NumToStr(SensorUS(S4));
-    ClearScreen();
-    SendResponseString(MAILBOX10, lol);
-    TextOut(0, LCD_LINE3, lol);
-    Wait(100);
-  }
+SetSensorUltrasonic(S4);
+string lol;
+while(true){
+lol= NumToStr(SensorUS(S4));
+ClearScreen();
+SendResponseString(MAILBOX10, lol);
+TextOut(0, LCD_LINE3, lol);
+Wait(100);
+}
 }
 
 task colorff(){
-  string msg1="C: "+NumToStr(SensorHTColorNum(COLOR_PORT));
-  string msg2="L: "+NumToStr(Sensor(TOUCH_PORT));
-  int color=0;
-  while(true){
-    color=SensorHTColorNum(COLOR_PORT);
-    msg1=NumToStr(color);
-    msg2="L: "+NumToStr(Sensor(TOUCH_PORT));
-    SendResponseString(MAILBOX10, msg1);
-    TextOut(0, LCD_LINE4, msg2);
-    Wait(150);
-  }
+string msg1="C: "+NumToStr(SensorHTColorNum(COLOR_PORT));
+string msg2="L: "+NumToStr(Sensor(TOUCH_PORT));
+int color=0;
+while(true){
+color=SensorHTColorNum(COLOR_PORT);
+msg1=NumToStr(color);
+msg2="L: "+NumToStr(Sensor(TOUCH_PORT));
+SendResponseString(MAILBOX10, msg1);
+TextOut(0, LCD_LINE4, msg2);
+Wait(150);
 }
- */
+}
+*/
 task exploreFreely(){
-  ref_y_axis=SensorHTCompass(COMPASS_PORT);
-  ref_x_axis=(ref_y_axis+90)%360;
-  string lll=NumToStr(ref_x_axis)+" "+NumToStr(ref_y_axis);
-  SendResponseString(MAILBOX10, lll);
+    ref_y_axis=SensorHTCompass(COMPASS_PORT);
+    ref_x_axis=(ref_y_axis+90)%360;
+    string lll=NumToStr(ref_x_axis)+" "+NumToStr(ref_y_axis);
+    SendResponseString(MAILBOX10, lll);
 
-     int compt=0;
+    int compt=0;
 
-     int usVal=0;
-     int colVal=0;
-     int compVal=0;
-     int touchVal=0;
+    int usVal=0;
+    int colVal=0;
+    int compVal=0;
+    int touchVal=0;
 
-/*   string gfgf="";
-     string deb="US: "+NumToStr(usVal)+"cV: "+NumToStr(compVal);
-     string deb2="light: "+NumToStr(lightVal);
-     string deb3="x: "+NumToStr(ref_x_axis)+"y: "+NumToStr(ref_y_axis);
-     ClearScreen();
-     TextOut(0, LCD_LINE3, deb);
-     SendResponseString(MAILBOX10, deb);
-     */
+    /*   string gfgf="";
+    string deb="US: "+NumToStr(usVal)+"cV: "+NumToStr(compVal);
+    string deb2="light: "+NumToStr(lightVal);
+    string deb3="x: "+NumToStr(ref_x_axis)+"y: "+NumToStr(ref_y_axis);
+    ClearScreen();
+    TextOut(0, LCD_LINE3, deb);
+    SendResponseString(MAILBOX10, deb);
+    */
 
-     turn(50, SensorHTCompass(COMPASS_PORT));                           // Premi�re balle !!!
-     forward_plus(0.28, 30, SensorHTCompass(COMPASS_PORT));
-     Precedes(search);
+    turn(50, SensorHTCompass(COMPASS_PORT));                           // Premi�re balle !!!
+    forward_plus(0.28, 30, SensorHTCompass(COMPASS_PORT));
+    Precedes(search);
 
 
 
-        turn(-SensorHTCompass(COMPASS_PORT)+ref_y_axis, SensorHTCompass(COMPASS_PORT));
-        float cpt=0;
-        while(cpt<2.8){
-          forward_plus(0.04, 30, SensorHTCompass(COMPASS_PORT));
-          usVal=SensorUS(US_PORT);
-          colVal=SensorHTColorNum(COLOR_PORT);
-          compVal=SensorHTCompass(COMPASS_PORT);
-          touchVal=Sensor(TOUCH_PORT);
-          /*checkCol(colVal, compVal);
-          checkUS(usVal, compVal);
-          checkTouch(touchVal, compVal);*/
-          cpt+=0.04;
-        }
-
-        // We should be on the top right corner now
-
-        if(colVal >= 6 && colVal <= 9){
-           if(compVal >= ref_y_axis - 30  && compVal <= ref_y_axis + 30){
-              turn(-compVal+ref_x_axis+15, compVal);
-           }
-           if(compVal >= (180+ref_y_axis)%360 - 30  && compVal <= (180+ref_y_axis)%360 + 30){
-              turn(-compVal+180+ref_x_axis+15, compVal);
-           }
-           if(compVal >= (180+ref_x_axis)%360 - 30  && compVal <= (180+ref_x_axis)%360 + 30){
-              turn(-compVal+ref_y_axis+15, compVal);
-           }
-           if(compVal >= ref_x_axis - 30  && compVal <= ref_x_axis + 30){
-              turn(-compVal+180+ref_y_axis+15, compVal);
-           }
-        }
-        if(usVal < 25){
-           if(compVal >= ref_y_axis - 30  && compVal <= ref_y_axis + 30){
-              turn(-compVal+ref_x_axis+15, compVal);
-           }
-           if(compVal >= (180+ref_y_axis)%360 - 30  && compVal <= (180+ref_y_axis)%360 + 30){
-              turn(-compVal+180+ref_x_axis+15, compVal);
-           }
-           if(compVal >= (180+ref_x_axis)%360 - 30  && compVal <= (180+ref_x_axis)%360 + 30){
-              turn(-compVal+ref_y_axis+15, compVal);
-           }
-           if(compVal >= ref_x_axis - 30  && compVal <= ref_x_axis + 30){
-              turn(-compVal+180+ref_y_axis+15, compVal);
-           }
-
-        }
-        if(touchVal == 1){
-            if(compVal >= ref_y_axis - 30  && compVal <= ref_y_axis + 30){
-                 turn(-compVal+ref_x_axis+15, compVal);
-              }
-              if(compVal >= (180+ref_y_axis)%360 - 30  && compVal <= (180+ref_y_axis)%360 + 30){
-                 turn(-compVal+180+ref_x_axis+15, compVal);
-              }
-              if(compVal >= (180+ref_x_axis)%360 - 30  && compVal <= (180+ref_x_axis)%360 + 30){
-                 turn(-compVal+ref_y_axis+15, compVal);
-              }
-              if(compVal >= ref_x_axis - 30  && compVal <= ref_x_axis + 30){
-                 turn(-compVal+180+ref_y_axis+15, compVal);
-              }
-        }
-}
-      /*
-task home(){
-  TextOut(0, LCD_LINE6, "Refy: "+NumToStr(SensorHTCompass(COMPASS_PORT)));
-  ref_y_axis=SensorHTCompass(COMPASS_PORT);
-  ref_x_axis=ref_y_axis+90;
-
-  turn(37, ref_y_axis);
-  TextOut(0, LCD_LINE7, "Ang: "+NumToStr(SensorHTCompass(COMPASS_PORT)));
-  forward_plus(0.70, 40, SensorHTCompass(COMPASS_PORT));
-
-  turn(-60, SensorHTCompass(COMPASS_PORT));
-  forward_plus(0.50, 40, SensorHTCompass(COMPASS_PORT));
-
-  if(dist_y > 0){
     turn(-SensorHTCompass(COMPASS_PORT)+ref_y_axis, SensorHTCompass(COMPASS_PORT));
-  }else{
-    dist_y=-dist_y;
-    turn(-SensorHTCompass(COMPASS_PORT)+ref_y_axis+180, SensorHTCompass(COMPASS_PORT));
+    float cpt=0;
+    while(cpt<2.8){
+        forward_plus(0.04, 30, SensorHTCompass(COMPASS_PORT));
+        usVal=SensorUS(US_PORT);
+        colVal=SensorHTColorNum(COLOR_PORT);
+        compVal=SensorHTCompass(COMPASS_PORT);
+        touchVal=Sensor(TOUCH_PORT);
+        /*checkCol(colVal, compVal);
+        checkUS(usVal, compVal);
+        checkTouch(touchVal, compVal);*/
+        cpt+=0.04;
+    }
+
+    // We should be on the top right corner now
+
+    if(colVal >= 6 && colVal <= 9){
+        if(compVal >= ref_y_axis - 30  && compVal <= ref_y_axis + 30){
+            turn(-compVal+ref_x_axis+15, compVal);
+        }
+        if(compVal >= (180+ref_y_axis)%360 - 30  && compVal <= (180+ref_y_axis)%360 + 30){
+            turn(-compVal+180+ref_x_axis+15, compVal);
+        }
+        if(compVal >= (180+ref_x_axis)%360 - 30  && compVal <= (180+ref_x_axis)%360 + 30){
+            turn(-compVal+ref_y_axis+15, compVal);
+        }
+        if(compVal >= ref_x_axis - 30  && compVal <= ref_x_axis + 30){
+            turn(-compVal+180+ref_y_axis+15, compVal);
+        }
+    }
+    if(usVal < 25){
+        if(compVal >= ref_y_axis - 30  && compVal <= ref_y_axis + 30){
+            turn(-compVal+ref_x_axis+15, compVal);
+        }
+        if(compVal >= (180+ref_y_axis)%360 - 30  && compVal <= (180+ref_y_axis)%360 + 30){
+            turn(-compVal+180+ref_x_axis+15, compVal);
+        }
+        if(compVal >= (180+ref_x_axis)%360 - 30  && compVal <= (180+ref_x_axis)%360 + 30){
+            turn(-compVal+ref_y_axis+15, compVal);
+        }
+        if(compVal >= ref_x_axis - 30  && compVal <= ref_x_axis + 30){
+            turn(-compVal+180+ref_y_axis+15, compVal);
+        }
+
+    }
+    if(touchVal == 1){
+        if(compVal >= ref_y_axis - 30  && compVal <= ref_y_axis + 30){
+            turn(-compVal+ref_x_axis+15, compVal);
+        }
+        if(compVal >= (180+ref_y_axis)%360 - 30  && compVal <= (180+ref_y_axis)%360 + 30){
+            turn(-compVal+180+ref_x_axis+15, compVal);
+        }
+        if(compVal >= (180+ref_x_axis)%360 - 30  && compVal <= (180+ref_x_axis)%360 + 30){
+            turn(-compVal+ref_y_axis+15, compVal);
+        }
+        if(compVal >= ref_x_axis - 30  && compVal <= ref_x_axis + 30){
+            turn(-compVal+180+ref_y_axis+15, compVal);
+        }
+    }
+}
+
+
+void gotosquare(int grid[], int xinit, int yinit, int xfinal, int yfinal, int sizex)
+{
+  int dist = 0.01;
+  if(xinit == sizex-1)
+  {
+    turn(-90,SensorHTCompass(COMPASS_PORT));
   }
-  forward(dist_y, 40);
-  if(dist_x>0){
-    turn(90, SensorHTCompass(COMPASS_PORT));
-  }else{
-    dist_x=-dist_x;
-    turn(-90, SensorHTCompass(COMPASS_PORT));
+  else if(xinit == 0)
+  {
+    turn(90,SensorHTCompass(COMPASS_PORT));
   }
-  forward(dist_x, 40);
+  Wait(200);
+  forward_plus(dist, 30, SensorHTCompass(COMPASS_PORT));
+
+}
+
+double_int neighbour(int grid[],int x, int y,int sizex, int sizey)
+{
+  double_int neighbour;
+  if(x == sizex-1)
+  {
+    if(grid[x-1+sizex*y]==0)
+    {
+      neighbour.int1=x-1;
+      neighbour.int2=y;
+    }
+    else if(y == sizey-1 || grid[x+sizex*(y+1)]==1)
+    {
+      neighbour.int1=sizex;
+      neighbour.int2=sizey;
+    }
+    else
+    {
+      neighbour.int1=x;
+      neighbour.int2=y+1;
+    }
+  }
+  else if(x == 0)
+  {
+    if(grid[1+sizex*y]==0)
+    {
+      neighbour.int1=1;
+      neighbour.int2=y;
+    }
+    else if(y == sizey-1)
+    {
+      neighbour.int1=sizex;
+      neighbour.int2=sizey;
+    }
+    else
+    {
+      neighbour.int1=x;
+      neighbour.int2=y+1;
+    }
+  }
+  else if(grid[x-1+sizex*y]==0)
+  {
+    neighbour.int1=x-1;
+    neighbour.int2=y;
+  }
+  else if(grid[x+1+sizex*y]==0)
+  {
+    neighbour.int1=x+1;
+    neighbour.int2=y;
+  }
+  else
+  {
+    neighbour.int1=sizex;
+    neighbour.int2=sizey;
+  }
+  return neighbour;
+}
+
+
+task long_search()
+{
+  int x = 0;
+  int y = 0;
+  int x2 = 0;
+  int y2 = 0;
+  int sizex = 10;
+  int sizey = 10;
+  int grid[];
+  ArrayInit(grid,0,100);
+  ArrayReplace(grid,0,1);
+  double_int neighbour1 = neighbour(grid,x,y,sizex,sizey);
+  while(neighbour1.int1!=sizex)
+  {
+    x2 = neighbour1.int1;
+    y2 = neighbour1.int2;
+    gotosquare(grid,x,y,x2,y2,sizex);
+    Wait(500);
+    int index = x2+sizex*y2;
+    ArrayReplace(grid,index,1);
+    Wait(100);
+    x = x2;
+    y = y2;
+    neighbour1=neighbour(grid,x,y,sizex,sizey);
+    if(colVal <= 10 && touchVal==0 && usVal < 20)
+      ExitTo(catch);
+  }
+}
+
+
+task goto_corner()
+{
+  turn(90,SensorHTCompass(COMPASS_PORT)); //position initiale : tourne vers là droite
+  Wait(200);
+  int usVal=SensorUS(US_PORT);
+  int colVal=SensorHTColorNum(COLOR_PORT);
+  int touchVal=Sensor(TOUCH_PORT);
+  until((colVal >= 6 && colVal <= 9)||(touchVal==1)) //s'il ne voit pas de mur
+    forward_plus(0.1, 30, SensorHTCompass(COMPASS_PORT)); //avancer
+  turn(90,SensorHTCompass(COMPASS_PORT)); //tourne vers la dorite pour aller dans le 1e coin
+  Wait(200);
+  until((colVal >= 6 && colVal <= 9)||(touchVal==1))
+    forward_plus(0.02, 30, SensorHTCompass(COMPASS_PORT));
+  turn(90,SensorHTCompass(COMPASS_PORT)); //tourne vers la dorite pour aller dans le 1e coin
+  Wait(200);
+  ExitTo(long_search); //commence le quedrillage
+}
+
+/*task scan_corner()
+{
+  OnRev(OUT_B, 25);
+  Wait(200);
+
+  int origin = SensorHTCompass(COMPASS_PORT); // initial position
+  int i=0;
+  int dist_list[];
+  int ang_list[];
+  ArrayInit(dist_list, 0, 60);
+  ArrayInit(ang_list, 0, 60);
+  for(i; i<60; i++){
+    dist_list[i]=SensorUS(US_PORT);
+    ang_list[i]=SensorHTCompass(COMPASS_PORT);
+    turn(1, ang_list[i]);
+    Wait(5);
+  }
+
+  int min_index=0;
+  i=0;
+  for(i; i<60; i++){
+    if(dist_list[i] < dist_list[min_index]){
+      if((abs(dist_list[i]-dist_list[i-1]) < 5) || (abs(dist_list[i]-dist_list[i+1]) < 5)){
+        min_index=i;
+      }
+    }
+  }
+  turn(-60, SensorHTCompass(COMPASS_PORT)); // Go back to init pos
+  angle_min = ang_list[min_index];
+  distmin = dist_list[min_index];
+  if(distmin < 30){ // something in this direction!
+    turn(-SensorHTCompass(COMPASS_PORT)+angle_min, SensorHTCompass(COMPASS_PORT));
+    ExitTo(catch);
+}
+*/
+
+int get_ball_angle(){
+  int origin = SensorHTCompass(COMPASS_PORT); // initial position
+  turn(-15, origin);
+
+  int i=0;
+  int dist_list[];
+  int ang_list[];
+  ArrayInit(dist_list, 0, 30);
+  ArrayInit(ang_list, 0, 30);
+  for(i; i<30; i++){
+    dist_list[i]=SensorUS(US_PORT);
+    ang_list[i]=SensorHTCompass(COMPASS_PORT);
+    turn(1, ang_list[i]);
+    Wait(5);
+  }
+
+  int min_index=0;
+  i=0;
+  for(i; i<30; i++){
+    if(dist_list[i] < dist_list[min_index]){
+      if((abs(dist_list[i]-dist_list[i-1]) < 5) || (abs(dist_list[i]-dist_list[i+1]) < 5)){
+        min_index=i;
+      }
+    }
+  }
+
+  turn(-30, SensorHTCompass(COMPASS_PORT)); // Go back to init pos
+  if(dist_list[min_index]<25)
+    return ang_list[min_index];
+  else
+    return -1;
+}
+
+task goto_ball_small()
+{
+  turn(90,SensorHTCompass(COMPASS_PORT)); //position initiale : tourne vers là droite
+  Wait(200);
+  int usVal=SensorUS(US_PORT);
+  int colVal=SensorHTColorNum(COLOR_PORT);
+  int touchVal=Sensor(TOUCH_PORT);
+
+    string re = NumToStr(colVal)+" - " +NumToStr(touchVal)+" - " + NumToStr(usVal);
+  SendResponseString(MAILBOX10, re);
+
+  while(colVal <= 10 && touchVal==0 && usVal > 20){
+  touchVal=Sensor(TOUCH_PORT);
+  usVal=SensorUS(US_PORT);
+  colVal=SensorHTColorNum(COLOR_PORT);
+  re = NumToStr(colVal)+" - " +NumToStr(touchVal)+" - " + NumToStr(usVal);
+  SendResponseString(MAILBOX10, re);
+  //until((colVal >= 6 && colVal <= 9)||(touchVal==1)||(usVal < 25)) //s'il ne voit pas de mur
+    forward_plus(0.02, 30, SensorHTCompass(COMPASS_PORT)); //avancer
+    }
+  OnRev(OUT_AC,30);
+  Wait(20);
+  Off(OUT_AC);
+  turn(-90,SensorHTCompass(COMPASS_PORT)); //tourne vers la dorite pour aller dans le 1e coin
+  Wait(200);
+  forward_plus(1.5, 30, SensorHTCompass(COMPASS_PORT));
+  turn(-90,SensorHTCompass(COMPASS_PORT)); //tourne vers la dorite pour aller dans le 1e coin
+  Wait(200);
+    OnRev(OUT_B, 25);
+  Wait(200);
+
+  int angle_min = get_min_angle(); // scan and get the angle with the nearest object
+  turn(-SensorHTCompass(COMPASS_PORT)+angle_min, SensorHTCompass(COMPASS_PORT)); // Turn to go on the direction computed just before
+  int dist_min = SensorUS(US_PORT); // The ball should be in front of us, dist_min cm away
+  forward_plus(dist_min/200, 30, SensorHTCompass(COMPASS_PORT)); // we should be closer to the ball now
+  ExitTo(catch);
+}
+
+task goto_ball_big()
+{
+  turn(90,SensorHTCompass(COMPASS_PORT)); //position initiale : tourne vers là droite
+  Wait(200);
+  int usVal=SensorUS(US_PORT);
+  int colVal=SensorHTColorNum(COLOR_PORT);
+  int touchVal=Sensor(TOUCH_PORT);
+
+    string re = NumToStr(colVal)+" - " +NumToStr(touchVal)+" - " + NumToStr(usVal);
+  SendResponseString(MAILBOX10, re);
+
+  while(colVal <= 10 && touchVal==0 && usVal > 20){
+  touchVal=Sensor(TOUCH_PORT);
+  usVal=SensorUS(US_PORT);
+  colVal=SensorHTColorNum(COLOR_PORT);
+  re = NumToStr(colVal)+" - " +NumToStr(touchVal)+" - " + NumToStr(usVal);
+  SendResponseString(MAILBOX10, re);
+  //until((colVal >= 6 && colVal <= 9)||(touchVal==1)||(usVal < 25)) //s'il ne voit pas de mur
+    forward_plus(0.4, 30, SensorHTCompass(COMPASS_PORT)); //avancer
+    }
+  int angle = get_ball_angle();
+  float size[] = {2.9,0.9,2.9};
+  int i = 0;
+  while(angle==-1)
+  {
+    forward_plus(0.1, 30, SensorHTCompass(COMPASS_PORT));
+    turn(-90,SensorHTCompass(COMPASS_PORT)); //tourne vers la dorite pour aller dans le 1e coin
+    Wait(200);
+    forward_plus(size[i], 30, SensorHTCompass(COMPASS_PORT));
+    angle = get_ball_angle();
+  }
+  turn(-SensorHTCompass(COMPASS_PORT)+angle, SensorHTCompass(COMPASS_PORT)); // Turn to go on the direction computed just before
+  int dist_min = SensorUS(US_PORT); // The ball should be in front of us, dist_min cm away
+  forward_plus(dist_min/200, 30, SensorHTCompass(COMPASS_PORT)); // we should be closer to the ball now
+  ExitTo(catch);
+}
+
+/*
+task home(){
+TextOut(0, LCD_LINE6, "Refy: "+NumToStr(SensorHTCompass(COMPASS_PORT)));
+ref_y_axis=SensorHTCompass(COMPASS_PORT);
+ref_x_axis=ref_y_axis+90;
+
+turn(37, ref_y_axis);
+TextOut(0, LCD_LINE7, "Ang: "+NumToStr(SensorHTCompass(COMPASS_PORT)));
+forward_plus(0.70, 40, SensorHTCompass(COMPASS_PORT));
+
+turn(-60, SensorHTCompass(COMPASS_PORT));
+forward_plus(0.50, 40, SensorHTCompass(COMPASS_PORT));
+
+if(dist_y > 0){
+turn(-SensorHTCompass(COMPASS_PORT)+ref_y_axis, SensorHTCompass(COMPASS_PORT));
+}else{
+dist_y=-dist_y;
+turn(-SensorHTCompass(COMPASS_PORT)+ref_y_axis+180, SensorHTCompass(COMPASS_PORT));
+}
+forward(dist_y, 40);
+if(dist_x>0){
+turn(90, SensorHTCompass(COMPASS_PORT));
+}else{
+dist_x=-dist_x;
+turn(-90, SensorHTCompass(COMPASS_PORT));
+}
+forward(dist_x, 40);
 }
 
 task touchff(){
-  while(true){
-  int val = Sensor(TOUCH_PORT);
-  ClearScreen();
-  TextOut(0, LCD_LINE5, "Touch: "+NumToStr(val));
-  Wait(1500);
-  }
+while(true){
+int val = Sensor(TOUCH_PORT);
+ClearScreen();
+TextOut(0, LCD_LINE5, "Touch: "+NumToStr(val));
+Wait(1500);
 }
-  */
+}
+*/
 // TOUCH : 1 when pressed
 
-
-
 task forwardff(){
-  //forward_plus(0.30, 40, SensorHTCompass(COMPASS_PORT));
-  turn(45, SensorHTCompass(COMPASS_PORT));
-  string a = "45 RES: "+NumToStr(SensorHTCompass(COMPASS_PORT));
-  SendResponseString(MAILBOX10, a);
-  Wait(1000);
-  turn(-30, SensorHTCompass(COMPASS_PORT));
-  a = "-30 RES: "+NumToStr(SensorHTCompass(COMPASS_PORT));
-  SendResponseString(MAILBOX10, a);
-  Wait(1000);
-  turn(140, SensorHTCompass(COMPASS_PORT));
-  a = "140 RES: "+NumToStr(SensorHTCompass(COMPASS_PORT));
-  SendResponseString(MAILBOX10, a);
-  Wait(1000);
-  turn(-120, SensorHTCompass(COMPASS_PORT));
-  a = "-120 RES: "+NumToStr(SensorHTCompass(COMPASS_PORT));
-  SendResponseString(MAILBOX10, a);
-  Wait(1000);
-  //forward_plus(-0.40, 40, SensorHTCompass(COMPASS_PORT));
+    //forward_plus(0.30, 40, SensorHTCompass(COMPASS_PORT));
+    turn(45, SensorHTCompass(COMPASS_PORT));
+    string a = "45 RES: "+NumToStr(SensorHTCompass(COMPASS_PORT));
+    SendResponseString(MAILBOX10, a);
+    Wait(1000);
+    turn(-30, SensorHTCompass(COMPASS_PORT));
+    a = "-30 RES: "+NumToStr(SensorHTCompass(COMPASS_PORT));
+    SendResponseString(MAILBOX10, a);
+    Wait(1000);
+    turn(140, SensorHTCompass(COMPASS_PORT));
+    a = "140 RES: "+NumToStr(SensorHTCompass(COMPASS_PORT));
+    SendResponseString(MAILBOX10, a);
+    Wait(1000);
+    turn(-120, SensorHTCompass(COMPASS_PORT));
+    a = "-120 RES: "+NumToStr(SensorHTCompass(COMPASS_PORT));
+    SendResponseString(MAILBOX10, a);
+    Wait(1000);
+    //forward_plus(-0.40, 40, SensorHTCompass(COMPASS_PORT));
 }
 
 
 task main()
 {
-  SetSensorUltrasonic(US_PORT);
-  SetSensorLowspeed(COMPASS_PORT);
-  SetSensorLowspeed(COLOR_PORT);
-  SetSensorTouch(TOUCH_PORT);
-  ref_y_axis=SensorHTCompass(COMPASS_PORT);
-  ref_x_axis=ref_y_axis+90;
-  ArrayInit(id, 0, 2);
+    SetSensorUltrasonic(US_PORT);
+    SetSensorLowspeed(COMPASS_PORT);
+    SetSensorLowspeed(COLOR_PORT);
+    SetSensorTouch(TOUCH_PORT);
+    ref_y_axis=SensorHTCompass(COMPASS_PORT);
+    ref_x_axis=ref_y_axis+90;
+    ArrayInit(id, 0, 2);
 
-  Precedes(forwardff);
-  //Precedes(exploreFreely, listen);
-  //Precedes(new_search);
-  //Precedes(touchff);
-  //Precedes(testUS);
+    Precedes(forwardff);
+    //Precedes(exploreFreely, listen);
+    //Precedes(new_search);
+    //Precedes(touchff);
+    //Precedes(testUS);
 }
