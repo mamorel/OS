@@ -9,7 +9,7 @@
 #define MSG_WAIT    5
 #define MSG_CUSTOM  6
 #define MSG_KICK    7
-#define ACHILLE     8
+#define ACHILLE     1
 
 #define COMPASS_PORT        S1
 #define COLOR_PORT          S2
@@ -659,21 +659,15 @@ task search()
 
 task listen()
 {
-    /*
-    if (BluetoothStatus(CONNECTION) != NO_ERR)
-    StopAllTasks ();
-    else
+    /* Wait for bluetooth to be connected */
+    while (BluetoothStatus(CONNECTION) != NO_ERR){}
+
     TextOut(0, LCD_LINE1, "Conn Success!  ");
-    */
     // Wait for START message
     TextOut(0, LCD_LINE2,       "Waiting Msg...");
 
-    while(true){
-        until (getMessage (msg))
-        if(msg[4]==MSG_START && msg[3]==ACHILLE){
-            break;
-        }
-    }
+    // Wait start msg
+    until (getMessage (msg));
 
     string debs;
     TextOut(0, LCD_LINE2,   "START !!!     ");
@@ -690,7 +684,7 @@ task listen()
 
     if (rank==0) // Leader -> exploration de l'arene
     {
-        StartTask(exploreFreely);
+        StartTask(go_to_ball_small);
     }
 
     if(next_rob != 0xFF){
@@ -699,7 +693,9 @@ task listen()
         SendResponseString(MAILBOX10, debs);
     }
 
-    while(true){
+    bool follow=true;
+
+    while(follow){
         while(!getMessage(msg)){}
         debs="Message !";
         SendResponseString(MAILBOX10, debs);
@@ -714,7 +710,7 @@ task listen()
                 StopAllTasks();
             }
 
-            if(msg[4]==MSG_WAIT){   // STOP MSG received
+            if(msg[4]==MSG_WAIT){   // WAIT MSG received
                 w8_time=msg[5];
                 debs="MSG_WAIT: "+NumToStr(w8_time)+" sec";
                 SendResponseString(MAILBOX10, debs);
@@ -724,7 +720,8 @@ task listen()
                 if(msg[5]==0 && msg[7]==ACHILLE){
                     // Stop follower and Start explore we are the leader now.
                     // Can we stop tasks that are not launched?
-                    //Stop(exploreFreely); Stop(new_search); Stop(catch);
+                    follow=false;
+                    StartTask(goto_corner);
                 }
                 if(msg[5]==rank+1){
                     // New follower -> get its id.
@@ -739,6 +736,8 @@ task listen()
             if(msg[4]==MSG_LEAD){    // We are the leader now.
                 // Stop follower
                 // Start explore
+                follow=false;
+                StartTask(goto_corner);
             }
 
             if(msg[4]==0x00 && rank !=0)    // Send the message to our follower
@@ -958,6 +957,7 @@ task long_search()
   int sizex = 10;
   int sizey = 10;
   int grid[];
+  int colVal, touchVal, usVal;
   ArrayInit(grid,0,100);
   ArrayReplace(grid,0,1);
   double_int neighbour1 = neighbour(grid,x,y,sizex,sizey);
