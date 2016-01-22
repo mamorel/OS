@@ -1,0 +1,1003 @@
+#define CONNECTION  1
+#define SERV_NAME   "eurecom-os-server"             // The name of the server
+#define MSG_ACTION  0
+#define MSG_ACK     1
+#define MSG_LEAD    2
+#define MSG_START   3
+#define MSG_STOP    4
+#define MSG_WAIT    5
+#define MSG_CUSTOM  6
+#define MSG_KICK    7
+#define ACHILLE     8
+#define COMPASS_PORT        S1
+#define COLOR_PORT          S2
+#define TOUCH_PORT          S3
+#define US_PORT             S4
+
+#define LEFT_MOTOR           OUT_C
+#define RIGHT_MOTOR          OUT_A
+#define BOTH_MOTORS          OUT_AC
+
+#define COLOR_GREEN          4
+#define COLOR_RED            9
+#define COLOR_BLUE           3
+
+#ifdef BIG
+#define COL_INF 6
+#define COL_SUP 9
+#else
+#define COL_INF 10
+#endif
+
+//#define       Sin(_X)   asm { sin __FLTRETVAL__, _X }
+//#define       Cos(_X)   asm { cos __FLTRETVAL__, _X }
+
+int ref_y_axis=0;
+int ref_x_axis=0;
+float dist_x=0;
+float dist_y=0;
+int dist_search=0;
+
+int w8_time=0;
+int cancel=0;
+
+byte next_rob;
+byte msg[];
+byte msgOut[];
+byte id[];
+int seq_nb=0;
+
+mutex w8_mutex;
+mutex next_mutex;
+mutex cancel_mutex;
+
+task goto_ball_small();
+task goto_ball_big();
+task search();
+task explore();
+task goto_corner();
+
+struct double_int
+{
+    int int1;
+    int int2;
+};
+
+/*
+   Both motors are not the same. We need to compute a factor to synchronize them. Result of experiments.
+*/
+float get_corr(float power)
+{
+  return -0.00150797*power*power+0.1964892857*power-8.0761666;
+}
+
+void joy()
+{
+    PlayTone(TONE_E4, MS_100);
+    Wait(MS_100);
+    PlayTone(TONE_G4, MS_100);
+    Wait(MS_100);
+    PlayTone(TONE_C5, MS_100);
+    Wait(MS_100);
+    PlayTone(TONE_E5, MS_100);
+    Wait(MS_100);
+    PlayTone(TONE_G5, MS_300);
+    Wait(MS_300);
+    PlayTone(TONE_E5, MS_100);
+    Wait(MS_100);
+    PlayTone(TONE_G5, SEC_1);
+    Wait(SEC_1);
+}
+
+// sendMessage function, the same as in the client example that will send an array of bytes over bluetooth
+void sendMessage (byte msg[]) {
+    seq_nb+=1;
+    CommBTWriteType args2;
+    args2.Connection = CONNECTION;
+    args2.Buffer= ByteArrayToStr (msg);
+
+    SysCommBTWrite(args2);
+    TextOut(0, LCD_LINE2,       "Trying to write");
+    while (BluetoothStatus (CONNECTION) == STAT_COMM_PENDING)
+    Wait (10);
+
+    if (BluetoothStatus (CONNECTION) == NO_ERR)
+    TextOut(0, LCD_LINE2,   "Write Done     ");
+    else
+    TextOut(0, LCD_LINE2,   "Write Failed   ");
+}
+
+// Function used to send ACTION messages.
+int send_action(byte dest, int angle, int dist, int speed){
+    char ang2[2];
+    ArrayInit(ang2, 0, 2);
+    char di[2];
+    ArrayInit(di, 0, 2);
+    char spee[2];
+    ArrayInit(spee, 0, 2);
+
+   ang2[0]=angle&0xFF;
+   angle >>=8;
+   ang2[1]=angle&0xFF;
+
+   byte distanc=dist&0xFF;
+
+   spee[0]=speed&0xFF;
+   speed >>=8;
+   spee[1]=speed&0xFF;
+
+    ArrayInit(msgOut, 0, 10);
+    msgOut[0]=id[0];
+    msgOut[1]=id[1];
+    msgOut[2]=ACHILLE;
+    msgOut[3]=dest,
+    msgOut[4]=MSG_ACTION;
+    msgOut[5]=ang2[0];
+    msgOut[6]=ang2[1];
+    msgOut[7]=distanc;
+    msgOut[8]=spee[0];
+    msgOut[9]=spee[1];
+
+    sendMessage(msgOut);
+    return 1;
+}
+
+// Function used to send WAIT messages
+int send_wait(byte dest, int delay)
+{
+    string del=FlattenVar(delay);
+    string id=FlattenVar(seq_nb);
+
+    ArrayInit(msgOut, 0, 6);
+    msgOut[0] = id[0];
+    msgOut[1] = id[1];
+    msgOut[2] = 0x08;
+    Acquire(next_mutex);
+    msgOut[3] = next_rob;
+    Release(next_mutex);                    //byte or int
+    msgOut[4] = MSG_WAIT;
+    msgOut[6] = del[0];
+
+    sendMessage(msgOut);
+    return 1;
+}
+
+// Function used to send LEAD messages
+int send_lead(byte dest){
+    string id=FlattenVar(seq_nb);
+
+    ArrayInit(msgOut, 0, 5);
+    msgOut[0]=id[0];
+    msgOut[1]=id[1];
+    msgOut[2]=ACHILLE;
+    msgOut[3]=dest;
+    msgOut[4]=MSG_LEAD;
+
+    sendMessage(msgOut);
+    return 1;
+}
+
+// Same function as in the client example provided. Receives messages over bluetooth
+char getMessage (byte &msg[]) {
+    until (BluetoothStatus(CONNECTION) == NO_ERR);  // Wait for connection
+    string __msg;
+    char r = ReceiveMessage(0,1,__msg);
+    if (r != 0)
+    return 0;
+
+    ArrayInit(msg,0,59);
+    StrToByteArray (__msg, msg);
+    r = ArrayLen(msg);
+    if (r < 5)
+    return 0;
+
+    return r;
+}
+
+/* Function used to rotate our robot using the COMPASS SENSOR.
+   angle: the robot will rotate by this angle
+   ref: reference of the previous angle
+*/
+int turn(int angle, int ref){
+    int end =0;
+    int obj=ref+angle;
+
+    // Get a valid value. Obj is the angle in which we need to go.
+    while(obj<0){
+        obj+=360;
+    }
+    obj=obj%360;
+
+    int compValue=SensorHTCompass(COMPASS_PORT);
+    int initValue=compValue;
+
+    string test = "CompValue: "+NumToStr(compValue)+" Obj: "+NumToStr(obj)+ " Obj+180: "+NumToStr(obj+180);
+    //SendResponseString(MAILBOX10, test);
+
+    /*
+       Test the configuration in order to rotate efficiently.
+    */
+    if(compValue > obj && compValue < (obj+180)){
+        while(compValue > obj){
+            OnFwd(OUT_A, 30);// turn left
+            OnRev(OUT_C,30);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        while(compValue < obj){
+            OnFwd(OUT_C, 30); // turn right
+            OnRev(OUT_A,30);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        Off(OUT_AC);
+    }
+    else if(initValue+angle > 360){
+        while(compValue > 2){
+            OnFwd(OUT_C, 30);
+            OnRev(OUT_A, 30);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        while(compValue > obj){
+            OnFwd(OUT_A, 30);// turn left
+            OnRev(OUT_C,30);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        while(compValue < obj){
+            OnFwd(OUT_C, 30); // turn right
+            OnRev(OUT_A,30);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        Off(OUT_AC);
+    }
+    else if(initValue+angle < 0){
+        while(compValue < 358){
+            OnFwd(OUT_A, 30);// turn left
+            OnRev(OUT_C,30);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        while(compValue > obj){
+            OnFwd(OUT_A, 30);// turn left
+            OnRev(OUT_C,30);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        while(compValue < obj){
+            OnFwd(OUT_C, 30); // turn right
+            OnRev(OUT_A,30);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        Off(OUT_AC);
+    }
+    else{
+        while(compValue < obj){
+            OnFwd(OUT_C, 30); // turn right
+            OnRev(OUT_A,30);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        while(compValue > obj){
+            OnFwd(OUT_A, 30);// turn left
+            OnRev(OUT_C,30);
+            compValue=SensorHTCompass(COMPASS_PORT);
+        }
+        Off(OUT_AC);
+    }
+    Off(OUT_ABC);
+    end=1;
+}
+
+// Given a POWER value for the motors, computes the corresponding speed.
+float speed(int power){
+    return 0.0036*power-0.007;
+}
+
+
+// Given a Speed in mm/s computes the corresponding power
+float compute_pow(float spe){
+ return (spe/1000+0.007)/0.0036;
+}
+
+/* Used to pilot the robot and make it go forward
+   dist: distance in cm
+   speed: speed in mm/s
+   angle: angle computed by the COMPASS SENSOR. Used to compute the distance traveled in the X and Y directions.
+*/
+float forward_plus(float dist, float speed, int angle){
+    float time=abs(20000*dist)/(speed); // Computes the time during which the motor should run. Some work to do on the units.
+    float alpha=(angle-ref_x_axis);
+    int colVal, usVal, touchVal;
+    float power= compute_pow(speed);
+    int distance_to_go=dist;
+    int speed_to_go=speed;
+    int new_angle=360-(angle-ref_y_axis);
+
+    if(next_rob != 0xFF){
+       send_action(next_rob, new_angle, distance_to_go, speed_to_go); // angle=curr_angle-angle_init
+    }
+
+    dist_x=dist_x+dist*Cos(alpha)/100;
+    dist_y=dist_y+dist*Sin(alpha)/100;
+
+    TextOut(0, LCD_LINE2, "distx: "+NumToStr(dist_x));
+    TextOut(0, LCD_LINE3, "disty: "+NumToStr(dist_y));
+
+    float tmp=0;
+    long t1;
+    while(tmp < time){
+        if(dist>0){
+            OnFwdSync(BOTH_MOTORS, power, get_corr(power));
+        }else{
+            OnRevSync(BOTH_MOTORS, power, get_corr(power));
+        }
+        t1=CurrentTick();
+
+      // Checks if we were told to stop or cancel our move.
+       Acquire(w8_mutex);
+        if(w8_time != 0){   // we need to wait
+            Off(BOTH_MOTORS);
+            Wait(w8_time*1000);
+            t1=CurrentTick();
+            w8_time=0;
+        }
+        Release(w8_mutex);
+
+        Acquire(cancel_mutex);
+        if(cancel==1){ // we need to cancel
+         Off(BOTH_MOTORS);
+         cancel=0;
+         if(dist>0){
+           return tmp*speed;
+         }else{
+           return -tmp*speed;
+         }
+        }
+        Release(cancel_mutex);
+
+        colVal=SensorHTColorNum(COLOR_PORT);
+        usVal=SensorHTCompass(COMPASS_PORT);
+        touchVal=Sensor(TOUCH_PORT);
+        if( (colVal >= 6 && colVal <= 9) || (usVal < 22) || (touchVal==1) ){    // Something in front of us -> exit and return the distance covered
+            TextOut(0, LCD_LINE3, "ABORT FWD_PLUS");
+            if(dist>0){
+                return tmp*speed;
+            }else{
+                return -tmp*speed;
+            }
+        }
+
+        Wait(200);
+        tmp=tmp+200+CurrentTick()- t1;
+    }
+    Off(BOTH_MOTORS);
+    return dist;
+}
+
+// Checks if a ball is actually in front of us or not.
+int distance()
+{
+    SetSensorUltrasonic(S4);
+    int list[];
+    ArrayInit(list, 0, 5);
+    int cpt = 0;
+    int ok = 0;
+    while(list[4]==0)
+    {
+        list[cpt]=SensorUS(S4);
+        if(list[cpt]<=15) ok++;
+        Wait(200);
+        cpt++;
+    }
+    if(ok>=3) return 1;
+    else return 0;
+
+}
+
+// When the robot is in front of a ball, this task will make it go forward in order to catch the ball.
+task catch()
+{
+    Off(OUT_ABC);
+    int dist=0;
+    int colVal=0;
+    int touchVal=0;
+
+    while(true)
+    {
+        colVal=Sensor(COLOR_PORT);                // Wall
+        if(colVal >= 6 && colVal <= 9){
+            ExitTo(goto_corner);
+        }
+        if(touchVal ==1){
+            ExitTo(goto_corner);
+        }
+
+        dist = SensorUS(S4);
+
+        ClearScreen();
+        TextOut(0,LCD_LINE3, "Dist: ");
+        NumOut(28,LCD_LINE3,dist);
+        while(dist>20)
+        {
+            forward_plus(8, 75, SensorHTCompass(COMPASS_PORT));
+            dist= SensorUS(S4);
+            colVal=Sensor(COLOR_PORT);                // Wall
+            if(colVal >= 6 && colVal <= 9){
+                ExitTo(goto_corner);
+            }
+            if(touchVal == 1){
+                ExitTo(goto_corner);
+            }
+        }
+
+        OnFwd(OUT_B, 50);
+        Wait(400);
+        Off(OUT_B);
+        forward_plus(3,100, SensorHTCompass(COMPASS_PORT));
+
+        if(distance()==1){
+            Off(OUT_ABC);
+            break;
+        }
+        else{
+            OnRev(OUT_B, 20);
+            Wait(80);
+        }
+    }
+
+    // Go back in the initial position
+    send_lead(next_rob);
+
+    if(dist_y > 0){
+        turn((-SensorHTCompass(COMPASS_PORT)+ref_y_axis)%360, SensorHTCompass(COMPASS_PORT));
+    }else{
+        dist_y=-dist_y;
+        turn((-SensorHTCompass(COMPASS_PORT)+ref_y_axis+180)%360, SensorHTCompass(COMPASS_PORT));
+    }
+    forward_plus(dist_y, 100,SensorHTCompass(COMPASS_PORT));
+    if(dist_x>0){
+        turn((-SensorHTCompass(COMPASS_PORT)+ref_x_axis+180)%360, SensorHTCompass(COMPASS_PORT));
+    }else{
+        dist_x=-dist_x;
+        turn((-SensorHTCompass(COMPASS_PORT)+ref_x_axis)%360, SensorHTCompass(COMPASS_PORT));
+    }
+    forward_plus(dist_x, 100,SensorHTCompass(COMPASS_PORT));
+    Off(OUT_ABC);
+    OnRev(OUT_B, 60);
+    Wait(150);
+
+    joy();
+}
+
+struct mins{
+    int angle;
+    int dist;
+};
+
+
+int get_min_angle(){
+    int origin = SensorHTCompass(COMPASS_PORT); // initial position
+    turn(-30, origin);
+
+    int i=0;
+    int dist_list[];
+    int ang_list[];
+    ArrayInit(dist_list, 0, 60);
+    ArrayInit(ang_list, 0, 60);
+    for(i; i<60; i++){
+        dist_list[i]=SensorUS(US_PORT);
+        ang_list[i]=SensorHTCompass(COMPASS_PORT);
+        turn(1, ang_list[i]);
+        Wait(5);
+    }
+
+    int min_index=0;
+    i=0;
+    for(i; i<60; i++){
+        if(dist_list[i] < dist_list[min_index]){
+            if((abs(dist_list[i]-dist_list[i-1]) < 5) || (abs(dist_list[i]-dist_list[i+1]) < 5)){
+                min_index=i;
+            }
+        }
+    }
+
+    turn(-30, SensorHTCompass(COMPASS_PORT)); // Go back to init pos
+    return ang_list[min_index];
+}
+
+mins get_min_dist(int re){
+    int origin = SensorHTCompass(COMPASS_PORT); // initial position
+    turn(-30, origin);
+
+    int i=0;
+    int dist_list[];
+    int ang_list[];
+    ArrayInit(dist_list, 0, 60);
+    string d;
+    ArrayInit(ang_list, 0, 60);
+    for(i; i<60; i++){
+        dist_list[i]=SensorUS(US_PORT);
+        d=NumToStr(i)+" : "+NumToStr(dist_list[i]);
+        ang_list[i]=SensorHTCompass(COMPASS_PORT);
+
+
+    turn(1, ang_list[i]);
+    Wait(10);
+}
+
+int min_index;
+if(re==0){
+    min_index=0;
+    i=0;
+    for(i; i<60; i++){
+        if(dist_list[i] < dist_list[min_index]){
+            if((abs(dist_list[i]-dist_list[i-1]) < 5) || (abs(dist_list[i]-dist_list[i+1]) < 5)){
+                min_index=i;
+            }
+        }
+    }
+}
+if(re==1){
+    int max_ind=0;
+    int min_ind=0;
+    int j=0;
+    for(j;j<5;j++){
+        if(dist_list[j] > dist_list[max_ind] && dist_list[j] < 250){
+            max_ind=j;
+        }
+    }
+    for(j=0;j<5;j++){
+        if(dist_list[j] < dist_list[min_ind]){
+            min_ind=j;
+        }
+    }
+    if(dist_list[max_ind]-dist_list[min_ind] < 30){
+        min_index=0;
+    }
+}
+turn(-SensorHTCompass(COMPASS_PORT)+ang_list[min_index+2], SensorHTCompass(COMPASS_PORT)); //Go in the computed drectionn
+mins res;
+res.angle=ang_list[min_index];
+res.dist=dist_list[min_index];
+return res;
+}
+
+
+
+int new_search_func(){
+    OnRev(OUT_B, 25);
+    Wait(200);
+
+
+    int angle_min = get_min_angle(); // scan and get the angle with the nearest object
+    turn(-SensorHTCompass(COMPASS_PORT)+angle_min, SensorHTCompass(COMPASS_PORT)); // Turn to go on the direction computed just before
+    int dist_min = SensorUS(US_PORT); // The ball should be in front of us, dist_min cm away
+    forward_plus(dist_min/2, 100, SensorHTCompass(COMPASS_PORT)); // we should be closer to the ball now (dest_min/200,30)
+
+    // scan again
+    int new_angle_min = get_min_angle();
+
+    int diff = abs(angle_min-new_angle_min);
+    turn(-SensorHTCompass(COMPASS_PORT)+new_angle_min, SensorHTCompass(COMPASS_PORT));
+
+    if(diff < 3){ // something in this direction!
+        return 1;
+    }else{
+        return 0;
+    }
+}
+
+task new_search(){
+    OnRev(OUT_B, 25);
+    Wait(200);
+
+    mins res = get_min_dist(0); // scan and get the angle with the nearest object
+    //turn(-SensorHTCompass(COMPASS_PORT)+angle_min, SensorHTCompass(COMPASS_PORT)); // Turn to go on the direction computed just before
+    //int dist_min = SensorUS(US_PORT); // The ball should be in front of us, dist_min cm away
+    TextOut(0, LCD_LINE5, NumToStr(res.dist));
+    string so = "dist_min: "+NumToStr(res.dist);
+   // SendResponseString(MAILBOX10, so);
+
+    forward_plus(res.dist, 100, SensorHTCompass(COMPASS_PORT)); // we should be closer to the ball now (res.dist/100,30)
+
+    /*
+    // scan again
+    mins new_mins = get_min_dist(1);
+
+    int diff = abs(res.angle-new_mins.angle);
+    string da = "Diff: "+NumToStr(diff);
+    SendResponseString(MAILBOX10, da);
+    //turn(-SensorHTCompass(COMPASS_PORT)+new_angle_min, SensorHTCompass(COMPASS_PORT));
+
+
+    if(diff < 5){ // something in this direction!
+    TextOut(0, LCD_LINE2, "Trouve");
+    //ExitTo(catch);
+}
+if(SensorUS(US_PORT) < 23){
+Wait(5000);
+}else{
+//ExitTo(exploreFreely);
+Wait(5000);
+}
+*/
+}
+
+
+task search()
+{
+    byte msg[];
+    //msg= send_wait()
+
+    OnRev(OUT_B,25);
+    Wait(200);
+    float list[];
+    float test[];
+    int i=0;
+    int j=0;
+    int lll=0;
+    int init=SensorHTCompass(COMPASS_PORT);
+    turn(-30, init);
+    string deb;
+
+    ArrayInit(test,0 ,6);
+    ArrayInit(list, 0, 60);
+    for(i;i<60;i++)
+    {
+        list[i]=SensorUS(S4);
+        deb="Value: "+NumToStr(list[i]);
+        ClearScreen();
+        TextOut(0, LCD_LINE3, deb);
+        turn(1, SensorHTCompass(COMPASS_PORT));
+        Wait(5);
+        if(i!=0){
+            if(list[i-1]!=0){
+                ClearScreen();
+                TextOut(0, LCD_LINE3, "%: "+NumToStr((list[i-1]-list[i])/list[i-1]));
+                float quo=abs(((list[i]-list[i-1])/list[i-1]));
+                if(abs((list[i]-list[i-1])/list[i-1])>0.4){
+                    dist_search=list[i];
+                    Off(OUT_B);
+                    if(i>4){
+                        //joy();
+                        turn(10, SensorHTCompass(COMPASS_PORT));
+                        ExitTo(catch);  // Surement une balle, on lance catch.
+                    }
+                }
+            }
+        }
+    }
+    // No ball, end task
+}
+
+/* Task used to communicate with the server and other robots.
+"Infinite" loop that will read messages and go forward, stop, or go from a follower to a leader mode
+*/
+
+task ecouter()
+{
+  // Wait for connection between the robot and the server to be established.
+    while (BluetoothStatus(CONNECTION) != NO_ERR){}
+    TextOut(0, LCD_LINE1, "Conn Success!  ");
+    // Wait for START message
+    TextOut(0, LCD_LINE2,       "Waiting Msg...");
+
+    until (getMessage (msg));
+
+
+// Get the START MESSAGE and analyze it.
+    string debs;
+    TextOut(0, LCD_LINE2,   "START !!!     ");
+    byte rank = msg[5];
+    byte length = msg[6];
+    byte previous = msg[7];
+    Acquire(next_mutex);
+    next_rob = msg[8];
+    Release(next_mutex);
+    bool follow=true;
+
+    int angle;
+    int dist;
+    int speed;
+
+    Wait (50);
+
+    if (rank==0) // Leader -> explore the arena
+    {
+    debs="LEADER";
+    SendResponseString(MAILBOX10, debs);
+        StartTask(goto_ball_big);
+        follow=false;
+    }
+
+        // we are not the last robot
+        debs="We are not the last robot";
+        SendResponseString(MAILBOX10, debs);
+
+        // "Infinite" loop to read messages as long as we are follower and not leader.
+        while(follow){
+        while(!getMessage(msg)){}
+        debs="Message !";
+        SendResponseString(MAILBOX10, debs);
+            Wait(50);
+            // Message for us
+        if(msg[3]==ACHILLE) {
+            debs="Pour Achille: ";
+            //SendResponseString(MAILBOX10, debs);
+
+            if(msg[4]==MSG_STOP){   // STOP MSG received
+                debs="MSG_STOP";
+                SendResponseString(MAILBOX10, debs);
+                StopAllTasks();
+            }
+
+            if(msg[4]==MSG_WAIT){   // WAIT MSG received
+                Acquire(w8_mutex);
+                w8_time=msg[5];
+                Release(w8_mutex);
+                debs="MSG_WAIT: "+NumToStr(w8_time)+" sec";
+                SendResponseString(MAILBOX10, debs);
+            }
+
+            if(msg[4]== MSG_KICK){    // KICK MSG received
+                if(msg[5]==0 && msg[7]==ACHILLE){
+                    // Stop follower and Start explore we are the leader now.
+
+                    StartTask(goto_ball_big);
+                    follow=false;
+
+                }
+                if(msg[5]==rank+1){
+                    // New follower -> get its id.
+                    Acquire(next_mutex);
+                    next_rob=msg[7];
+                    Release(next_mutex);
+                }
+                if(msg[5]==rank){
+                    // We are kicked
+                    StopAllTasks();
+                }
+            }
+
+            if(msg[4]==MSG_LEAD){    // We are the leader now.
+                // Stop follower
+                // Start explore
+                follow=false;
+                StartTask(goto_corner);
+            }
+
+            if(msg[4]==0x00 && rank !=0)    // Send the message to our follower in the forward_plus function
+            {
+            string te="TEST";
+            SendResponseString(MAILBOX10, te);
+                Acquire(cancel_mutex);
+                cancel=0;
+                Release(cancel_mutex);
+                angle= 256*msg[6]+msg[5];
+                string received_ang = "Received angle : " + NumToStr(angle);
+                SendResponseString(MAILBOX10, received_ang);
+                dist=msg[7];  //in cm
+                speed= msg[8] +256*msg[9]; //in mm/s
+
+                turn(-angle, ref_y_axis);
+                forward_plus(dist, speed, SensorHTCompass(COMPASS_PORT));
+            }
+            if(msg[4] == 0x08){
+                Acquire(cancel_mutex);
+                cancel=1;
+                Release(cancel_mutex);
+            }
+        }
+    }
+
+}
+
+task long_search()
+{
+ int angle[] = {-90,90};
+ int j = 1;
+ while(true){
+  int usVal=SensorUS(US_PORT);
+  int colVal=SensorHTColorNum(COLOR_PORT);
+  int touchVal=Sensor(TOUCH_PORT);
+  until((colVal >= 12 ||(colVal >= 5 && colVal <= 7) || colVal == 3)&&(touchVal==1)){ // no wall
+    if(SensorHTColorNum(COLOR_PORT) <= 10 && Sensor(TOUCH_PORT)==0 && SensorUS(US_PORT) < 22){
+      forward_plus(15, 100, SensorHTCompass(COMPASS_PORT));
+      usVal=SensorUS(US_PORT);
+      colVal=SensorHTColorNum(COLOR_PORT);
+      touchVal=Sensor(TOUCH_PORT);
+      if((colVal >= 12 ||(colVal >= 5 && colVal <= 7) || colVal == 3)||(touchVal==1))
+        break;
+      else
+        ExitTo(catch);
+    }
+    usVal=SensorUS(US_PORT);
+    colVal=SensorHTColorNum(COLOR_PORT);
+    touchVal=Sensor(TOUCH_PORT);
+    forward_plus(5, 100, SensorHTCompass(COMPASS_PORT));
+  }
+  OnRev(OUT_AC,30);
+  Wait(100);
+  Off(OUT_AC);
+  turn(angle[j],SensorHTCompass(COMPASS_PORT)); // turn right corner
+  Wait(200);
+  usVal=SensorUS(US_PORT);
+  colVal=SensorHTColorNum(COLOR_PORT);
+  touchVal=Sensor(TOUCH_PORT);
+  int i = 0;
+  while(i<=7){ // 35 cm
+    if((colVal >= 12 ||(colVal >= 5 && colVal <= 7) || colVal == 3)&&(touchVal==1)){
+      if(j==0){
+        j=1;
+      }else{
+        j=0;
+      }
+      break;
+    }
+
+    if(SensorHTColorNum(COLOR_PORT) <= 10 && Sensor(TOUCH_PORT)==0 && SensorUS(US_PORT) < 22){
+      forward_plus(15, 100, SensorHTCompass(COMPASS_PORT));
+      usVal=SensorUS(US_PORT);
+      colVal=SensorHTColorNum(COLOR_PORT);
+      touchVal=Sensor(TOUCH_PORT);
+      if((colVal >= 12 ||(colVal >= 5 && colVal <= 7) || colVal == 3)||(touchVal==1))
+        break;
+      else
+        ExitTo(catch);
+    }
+    usVal=SensorUS(US_PORT);
+    colVal=SensorHTColorNum(COLOR_PORT);
+    touchVal=Sensor(TOUCH_PORT);
+    forward_plus(5, 100, SensorHTCompass(COMPASS_PORT));
+    i++;
+
+  }
+  OnRev(OUT_AC,30);
+  Wait(100);
+  Off(OUT_AC);
+  turn(angle[j],SensorHTCompass(COMPASS_PORT)); // turn first corner
+  Wait(200);
+  if(j==0){
+    j=1;
+  }else{
+    j=0;
+  }
+ }
+}
+
+
+task goto_corner()
+{
+  turn(90,SensorHTCompass(COMPASS_PORT)); // init pos, turn right
+  Wait(200);
+  int usVal=SensorUS(US_PORT);
+  int colVal=SensorHTColorNum(COLOR_PORT);
+  int touchVal=Sensor(TOUCH_PORT);
+  until((colVal >= 12 ||(colVal >= 5 && colVal <= 7))&&(touchVal==1)){ //no wall
+    usVal=SensorUS(US_PORT);
+    colVal=SensorHTColorNum(COLOR_PORT);
+    touchVal=Sensor(TOUCH_PORT);
+    forward_plus(3, 100, SensorHTCompass(COMPASS_PORT));
+  }
+  OnRev(OUT_AC,30);
+  Wait(50);
+  Off(OUT_AC);
+  turn(90,SensorHTCompass(COMPASS_PORT)); // turn right corner
+  Wait(200);
+  usVal=SensorUS(US_PORT);
+  colVal=SensorHTColorNum(COLOR_PORT);
+  touchVal=Sensor(TOUCH_PORT);
+  until((colVal >= 12 ||(colVal >= 5 && colVal <= 7))&&(touchVal>=1)){
+    usVal=SensorUS(US_PORT);
+    colVal=SensorHTColorNum(COLOR_PORT);
+    touchVal=Sensor(TOUCH_PORT);
+    forward_plus(3, 100, SensorHTCompass(COMPASS_PORT));
+  }
+  OnRev(OUT_AC,30);
+  Wait(50);
+  Off(OUT_AC);
+  turn(90,SensorHTCompass(COMPASS_PORT)); // turn right corner
+  Wait(200);
+  ExitTo(long_search);
+}
+
+int get_ball_angle(){
+  int origin = SensorHTCompass(COMPASS_PORT); // initial position
+  turn(-15, origin);
+
+  int i=0;
+  int dist_list[];
+  int ang_list[];
+  ArrayInit(dist_list, 0, 30);
+  ArrayInit(ang_list, 0, 30);
+  for(i; i<30; i++){
+    dist_list[i]=SensorUS(US_PORT);
+    ang_list[i]=SensorHTCompass(COMPASS_PORT);
+    turn(1, ang_list[i]);
+    Wait(5);
+  }
+
+  int min_index=0;
+  i=0;
+  for(i; i<30; i++){
+    if(dist_list[i] < dist_list[min_index]){
+      if((abs(dist_list[i]-dist_list[i-1]) < 5) || (abs(dist_list[i]-dist_list[i+1]) < 5)){
+        min_index=i;
+      }
+    }
+  }
+
+  turn(-30, SensorHTCompass(COMPASS_PORT)); // Go back to init pos
+  if(dist_list[min_index]<25)
+    return ang_list[min_index];
+  else
+    return -1;
+}
+
+task goto_ball_small()
+{
+  forward_plus(100, 100, SensorHTCompass(COMPASS_PORT));
+  int angle_min = get_min_angle(); // scan and get the angle with the nearest object
+  turn(-SensorHTCompass(COMPASS_PORT)+angle_min, SensorHTCompass(COMPASS_PORT)); // Turn to go on the direction computed just before
+  int dist_min = SensorUS(US_PORT); // The ball should be in front of us, dist_min cm away
+  forward_plus(dist_min+5, 100, SensorHTCompass(COMPASS_PORT)); // we should be closer to the ball now (dist_min/200,30)
+  ExitTo(catch);
+}
+
+task goto_ball_big()
+{
+
+  turn(90,SensorHTCompass(COMPASS_PORT)); // init pos, turn right
+  Wait(200);
+  send_action(next_rob, 0, 30, 100);
+  int usVal=SensorUS(US_PORT);
+  int colVal=SensorHTColorNum(COLOR_PORT);
+  int touchVal=Sensor(TOUCH_PORT);
+  forward_plus(50, 100, SensorHTCompass(COMPASS_PORT));
+//  turn(-90,SensorHTCompass(COMPASS_PORT));
+//  Wait(200);
+//  forward_plus(30, 100, SensorHTCompass(COMPASS_PORT));
+//  int angle = get_ball_angle();
+  float size[] = {250,90,290};
+  int i = 0;
+//  if(angle==-1){
+//    turn(-90,SensorHTCompass(COMPASS_PORT));
+//  }
+  int angle = -1;
+  while(angle==-1)
+  {
+    turn(-90,SensorHTCompass(COMPASS_PORT)); // turn right first corner
+    Wait(200);
+    for(int j = 0; j<3; j++){
+      forward_plus(size[i]/3, 100, SensorHTCompass(COMPASS_PORT));
+      turn(-SensorHTCompass(COMPASS_PORT)+ref_y_axis,SensorHTCompass(COMPASS_PORT));
+    }
+    angle = get_ball_angle();
+  }
+  turn(-SensorHTCompass(COMPASS_PORT)+angle, SensorHTCompass(COMPASS_PORT)); // Turn to go on the direction computed just before
+  int dist_min = SensorUS(US_PORT); // The ball should be in front of us, dist_min cm away
+  forward_plus(dist_min+5, 100, SensorHTCompass(COMPASS_PORT)); // we should be closer to the ball now
+  ExitTo(catch);
+}
+
+
+task testUS(){
+ while(true){
+  TextOut(0, LCD_LINE6, NumToStr(SensorUS(US_PORT)));
+  Wait(1000);
+  ClearScreen();
+ }
+
+}
+
+task main()
+{
+    // Set sensors
+    SetSensorUltrasonic(US_PORT);
+    SetSensorLowspeed(COMPASS_PORT);
+    SetSensorLowspeed(COLOR_PORT);
+    SetSensorTouch(TOUCH_PORT);
+
+    // compute angle references
+    ref_y_axis=SensorHTCompass(COMPASS_PORT);
+    ref_x_axis=ref_y_axis+90;
+    ArrayInit(id, 0, 2);
+
+    // start listening
+    Precedes(ecouter);
+}
